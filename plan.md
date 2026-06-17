@@ -547,9 +547,10 @@ rbook = "0.7"
 # 缓存
 foyer = { version = "0.22", features = ["runtime-tokio"] }
 
-# 序列化(TOML)
+# 序列化(TOML + JSON, API 返回 JSON)
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
+serde_json = "1.0"
 
 # 工具
 uuid = { version = "1", features = ["v4"] }
@@ -565,25 +566,26 @@ thiserror = "2"
 
 ## 10. 实施计划
 
-### 阶段 1: 项目骨架
+### 阶段 1: 项目骨架 ✅
 
-- [ ] 初始化 `Cargo.toml`,添加依赖
-- [ ] 编写 `Dockerfile`(多阶段构建 + cargo-chef)
-- [ ] 编写 `.dockerignore`
-- [ ] 实现 `config.rs` — 读取环境变量(`FNINE_HOST`, `FNINE_PORT`, `FNINE_DATA_DIR`)
-- [ ] 实现 `error.rs` — 统一错误类型和 `IntoResponse`
-- [ ] 搭建 `main.rs` — Axum 路由注册 + 启动,嵌入 `tower-http` 中间件
-- [ ] 创建 Askama 基础模板(`base.html`)
-- [ ] 实现 TOML 文件存储层(`db/store.rs`)
+- [x] 初始化 `Cargo.toml`,添加依赖
+- [x] 编写 `Dockerfile`(多阶段构建 + cargo-chef)
+- [x] 编写 `.dockerignore`
+- [x] 实现 `config.rs` — 读取环境变量(`FNINE_HOST`, `FNINE_PORT`, `FNINE_DATA_DIR`)
+- [x] 实现 `error.rs` — 统一错误类型和 `IntoResponse`
+- [x] 搭建 `main.rs` — Axum 路由注册 + 启动,嵌入 `tower-http` 中间件
+- [x] 创建 Askama 基础模板(`base.html`)
+- [x] 实现 TOML 文件存储层(`db/store.rs`)
+- [x] GitHub Actions CI/CD workflows
 
-### 阶段 2: 书籍管理
+### 阶段 2: 书籍管理 ✅
 
-- [ ] 实现 EPUB 上传(`POST /upload`,multipart 表单)
-- [ ] 使用 rbook 解析 EPUB 元数据
-- [ ] 实现书籍列表(`GET /`) + 书籍卡片组件
-- [ ] 实现书籍详情(`GET /book/:id`)
-- [ ] 实现书籍删除(文件 + TOML 记录)
-- [ ] 实现封面提取和显示
+- [x] 实现 EPUB 上传(`POST /upload`,multipart 表单)
+- [x] 使用 rbook 解析 EPUB 元数据
+- [x] 实现书籍列表(`GET /`) + 书籍卡片组件
+- [x] 实现书籍详情(`GET /book/:id`)
+- [x] 实现书籍删除(文件 + TOML 记录)
+- [x] 实现封面提取和显示
 
 ### 阶段 3: 在线阅读
 

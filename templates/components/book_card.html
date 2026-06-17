@@ -1,0 +1,20 @@
+<div class="book-card">
+    <a href="/book/{{ book.id }}" class="book-cover-link">
+        {% if book.cover_ext.is_some() %}
+        <img
+            src="/covers/{{ book.id }}"
+            alt="{{ book.title }}"
+            class="book-cover"
+            loading="lazy"
+        />
+        {% else %}
+        <div class="book-cover-placeholder">📘</div>
+        {% endif %}
+    </a>
+    <div class="book-info">
+        <h3 class="book-title">
+            <a href="/book/{{ book.id }}">{{ book.title }}</a>
+        </h3>
+        <p class="book-author">{{ book.author }}</p>
+    </div>
+</div>

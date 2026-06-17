@@ -1,0 +1,38 @@
+{% extends "base.html" %} {% block title %}书库 — Fnine{% endblock %} {% block
+content %}
+<h1>我的书库</h1>
+
+{% if books.len() == 0 %}
+<div class="empty-state">
+    <p>📖 还没有书籍,快去上传一本吧!</p>
+    <a href="/upload" class="btn btn-primary">上传书籍</a>
+</div>
+{% else %}
+<div class="book-grid">
+    {% for book in books %}
+    <div class="book-card">
+        <a href="/book/{{ book.id }}" class="book-cover-link">
+            {% if book.cover_ext.is_some() %}
+            <img
+                src="/covers/{{ book.id }}"
+                alt="{{ book.title }}"
+                class="book-cover"
+                loading="lazy"
+            />
+            {% else %}
+            <div class="book-cover-placeholder">📘</div>
+            {% endif %}
+        </a>
+        <div class="book-info">
+            <h3 class="book-title">
+                <a href="/book/{{ book.id }}">{{ book.title }}</a>
+            </h3>
+            <p class="book-author">{{ book.author }}</p>
+            <div class="book-meta">
+                <span>{{ book.chapter_count }} 章</span>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %} {% endblock %}
