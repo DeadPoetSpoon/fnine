@@ -76,10 +76,11 @@ body {
 
 /* === Main content === */
 .container {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 2rem 1rem;
     flex: 1;
+}
+
+.page-title {
+    text-align: center;
 }
 
 /* === Footer === */
@@ -140,7 +141,7 @@ body {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     gap: 1.5rem;
-    margin-top: 1.5rem;
+    margin: 1.5rem 10rem;
 }
 
 .book-card {
@@ -224,7 +225,7 @@ body {
 
 /* === Upload Form === */
 .upload-form {
-    max-width: 560px;
+    max-width: 70%;
     margin: 2rem auto;
 }
 
@@ -282,6 +283,8 @@ body {
     display: flex;
     gap: 2rem;
     margin-top: 1rem;
+    margin-left: 5rem;
+    margin-right: 5rem;
 }
 
 .book-detail-cover {
@@ -369,4 +372,280 @@ body {
     .book-grid {
         grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     }
+}
+
+/* === Theme Variables === */
+[data-theme="light"],
+:root {
+    --reader-bg: #fcfaf7;
+    --reader-text: #2c2c2c;
+    --reader-toolbar-bg: #ffffff;
+}
+
+[data-theme="dark"] {
+    --color-bg: #1a1a2e;
+    --color-surface: #252540;
+    --color-text: #e0e0e0;
+    --color-text-muted: #999;
+    --color-primary: #7b9fd4;
+    --color-primary-hover: #96b8e8;
+    --color-border: #3a3a5c;
+    --color-nav-bg: #252540;
+    --reader-bg: #12121f;
+    --reader-text: #d4d4d4;
+    --reader-toolbar-bg: #1e1e32;
+}
+
+[data-theme="sepia"] {
+    --color-bg: #f4ecd8;
+    --color-surface: #faf3e0;
+    --color-text: #5b4636;
+    --color-text-muted: #8b7355;
+    --color-primary: #8b5e3c;
+    --color-primary-hover: #6b4423;
+    --color-border: #d4c5a9;
+    --color-nav-bg: #faf3e0;
+    --reader-bg: #f4ecd8;
+    --reader-text: #5b4636;
+    --reader-toolbar-bg: #faf3e0;
+}
+
+/* === Reader Layout === */
+.reader-layout {
+    display: flex;
+    width: calc(100vw - 1rem);
+}
+
+.toc-sidebar {
+    width: 260px;
+    flex-shrink: 0;
+    background: var(--color-surface);
+    border-right: 1px solid var(--color-border);
+    overflow-y: auto;
+    padding: 1rem;
+    position: sticky;
+    top: 56px;
+    height: calc(100vh - 56px);
+}
+
+.toc-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.toc-header h3 {
+    font-size: 1rem;
+}
+
+.toc-toggle {
+    display: none;
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: var(--color-text-muted);
+}
+
+.toc-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.toc-item {
+    display: block;
+    padding: 0.4rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    color: var(--color-text);
+    text-decoration: none;
+    transition: background 0.15s;
+}
+
+.toc-item:hover {
+    background: var(--color-border);
+}
+
+.toc-item.active {
+    background: var(--color-primary);
+    color: #fff;
+}
+
+.reader-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--reader-bg);
+}
+
+.reader-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.6rem 1.5rem;
+    background: var(--reader-toolbar-bg);
+    border-bottom: 1px solid var(--color-border);
+    position: sticky;
+    top: 56px;
+    z-index: 10;
+}
+
+.chapter-title {
+    flex: 1;
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.btn-icon {
+    background: none;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    font-size: 1rem;
+    color: var(--color-text);
+}
+
+.btn-icon:hover {
+    background: var(--color-border);
+}
+
+.chapter-content {
+    flex: 1;
+    padding: 2rem;
+    max-width: 100vw;
+    color: var(--reader-text);
+    font-size: 1.05rem;
+    line-height: 1.8;
+    white-space: pre-wrap;
+    text-wrap: auto;
+}
+
+.plain-text {
+    white-space: pre-wrap;
+    text-wrap: auto;
+}
+
+.chapter-content h1,
+.chapter-content h2,
+.chapter-content h3 {
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+}
+
+.chapter-content p {
+    margin-bottom: 1em;
+}
+
+.chapter-content img {
+    max-width: 100%;
+    height: auto;
+}
+
+.reader-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    padding: 1rem 1.5rem;
+    background: var(--reader-toolbar-bg);
+    border-top: 1px solid var(--color-border);
+}
+
+.reader-nav .btn.disabled {
+    opacity: 0.4;
+    pointer-events: none;
+    cursor: default;
+}
+
+.chapter-indicator {
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+}
+
+@media (max-width: 768px) {
+    .toc-sidebar {
+        position: fixed;
+        left: -280px;
+        top: 0;
+        z-index: 200;
+        height: 100vh;
+        transition: left 0.3s;
+        box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
+    }
+    .toc-sidebar.open {
+        left: 0;
+    }
+    .toc-toggle {
+        display: block;
+    }
+    .reader-layout {
+        margin: -1rem -0.5rem;
+    }
+    .chapter-content {
+        padding: 1rem;
+    }
+}
+
+/* === Footnotes === */
+.fn-ref {
+    color: var(--color-primary);
+    cursor: pointer;
+    font-weight: 600;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 3px;
+}
+
+.fn-ref:hover {
+    color: var(--color-primary-hover);
+}
+
+.chapter-footnotes {
+    max-width: 800px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 2rem;
+    border-top: 1px solid var(--color-border);
+    color: var(--reader-text);
+}
+
+.chapter-footnotes h4 {
+    margin-bottom: 0.75rem;
+    font-size: 0.95rem;
+    color: var(--color-text-muted);
+}
+
+.footnote-list {
+    padding-left: 1.5rem;
+    font-size: 0.9rem;
+    line-height: 1.7;
+}
+
+.footnote-list li {
+    margin-bottom: 0.4rem;
+}
+
+/* Footnote popup */
+.fn-popup {
+    display: none;
+    position: absolute;
+    z-index: 1000;
+    min-width: 260px;
+    max-width: 380px;
+    padding: 0.75rem 1rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-primary);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: var(--color-text);
+}
+
+.fn-popup.visible {
+    display: block;
 }

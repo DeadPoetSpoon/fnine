@@ -587,12 +587,12 @@ thiserror = "2"
 - [x] 实现书籍删除(文件 + TOML 记录)
 - [x] 实现封面提取和显示
 
-### 阶段 3: 在线阅读
+### 阶段 3: 在线阅读 ✅
 
-- [ ] 实现章节内容提取(EPUB spine 解析)
-- [ ] 实现阅读器页面(`GET /book/:id/read/:chapter`)
-- [ ] 实现章节目录侧栏
-- [ ] 实现主题切换 CSS(light/dark/sepia)
+- [x] 实现章节内容提取(EPUB spine 解析)
+- [x] 实现阅读器页面(`GET /book/:id/read/:chapter`)
+- [x] 实现章节目录侧栏
+- [x] 实现主题切换 CSS(light/dark/sepia)
 
 ### 阶段 4: 进度与标注
 

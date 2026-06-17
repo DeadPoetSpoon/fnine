@@ -1,8 +1,5 @@
 {% extends "base.html" %} {% block title %}书库 — Fnine{% endblock %} {% block
-content %}
-<h1>我的书库</h1>
-
-{% if books.len() == 0 %}
+content %} {% if books.len() == 0 %}
 <div class="empty-state">
     <p>📖 还没有书籍,快去上传一本吧!</p>
     <a href="/upload" class="btn btn-primary">上传书籍</a>

@@ -1,11 +1,11 @@
-{% extends "base.html" %}
-
-{% block title %}上传书籍 — Fnine{% endblock %}
-
-{% block content %}
-<h1>上传 EPUB 书籍</h1>
-
-<form action="/upload" method="post" enctype="multipart/form-data" class="upload-form">
+{% extends "base.html" %} {% block title %}上传书籍 — Fnine{% endblock %} {%
+block content %}
+<form
+    action="/upload"
+    method="post"
+    enctype="multipart/form-data"
+    class="upload-form"
+>
     <div class="form-group">
         <label for="file-input" class="file-label">
             <div class="file-dropzone">
@@ -21,7 +21,7 @@
             accept=".epub"
             required
             class="file-input"
-        >
+        />
     </div>
 
     <div class="form-actions">
@@ -31,17 +31,19 @@
 </form>
 
 <script>
-// Show selected filename
-document.getElementById('file-input').addEventListener('change', function(e) {
-    const file = e.target.files[0];
-    if (file) {
-        const dropzone = document.querySelector('.file-dropzone');
-        dropzone.querySelector('.file-icon').textContent = '📚';
-        dropzone.querySelector('p').textContent = file.name;
-        dropzone.querySelector('.file-hint').textContent =
-            (file.size / 1024 / 1024).toFixed(1) + ' MB';
-        dropzone.classList.add('has-file');
-    }
-});
+    // Show selected filename
+    document
+        .getElementById("file-input")
+        .addEventListener("change", function (e) {
+            const file = e.target.files[0];
+            if (file) {
+                const dropzone = document.querySelector(".file-dropzone");
+                dropzone.querySelector(".file-icon").textContent = "📚";
+                dropzone.querySelector("p").textContent = file.name;
+                dropzone.querySelector(".file-hint").textContent =
+                    (file.size / 1024 / 1024).toFixed(1) + " MB";
+                dropzone.classList.add("has-file");
+            }
+        });
 </script>
 {% endblock %}

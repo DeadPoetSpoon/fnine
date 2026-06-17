@@ -1,0 +1,81 @@
+{% extends "base.html" %} {% block title %}{{ chapter_label }} — {{ book_title
+}}{% endblock %} {% block content %}
+<div class="reader-layout" id="reader-app">
+    <aside class="toc-sidebar" id="toc-sidebar">
+        <div class="toc-header">
+            <h3>目录</h3>
+            <button
+                class="btn-icon"
+                data-action="hide-sidebar"
+                aria-label="隐藏目录"
+            >
+                ✕
+            </button>
+        </div>
+        <nav class="toc-list">
+            {% for ch in toc %}
+            <a
+                href="/book/{{ book_id }}/read/{{ ch.index }}"
+                class="toc-item {% if ch.index == chapter_index %}active{% endif %}"
+                >{{ ch.label }}</a
+            >
+            {% endfor %}
+        </nav>
+    </aside>
+
+    <div class="reader-main">
+        <div class="reader-toolbar">
+            <button
+                class="btn-icon"
+                data-action="open-toc"
+                aria-label="打开目录"
+                id="toc-open-btn"
+            >
+                ☰
+            </button>
+            <span class="chapter-title">{{ chapter_label }}</span>
+            <div class="toolbar-actions">
+                <button
+                    class="btn-icon theme-toggle"
+                    aria-label="切换主题"
+                    id="theme-btn"
+                >
+                    ☀️
+                </button>
+            </div>
+        </div>
+
+        <article class="chapter-content" id="chapter-content">
+            <pre class="plain-text">{{ chapter_content }}</pre>
+        </article>
+
+        <nav class="reader-nav">
+            {% if chapter_index > 0 %}
+            <a
+                href="/book/{{ book_id }}/read/{{ chapter_index - 1 }}"
+                class="btn btn-secondary"
+                >← 上一章</a
+            >
+            {% else %}
+            <span class="btn btn-secondary disabled">← 上一章</span>
+            {% endif %}
+
+            <span class="chapter-indicator"
+                >{{ chapter_index + 1 }} / {{ chapter_count }}</span
+            >
+
+            {% if chapter_index + 1 < chapter_count %}
+            <a
+                href="/book/{{ book_id }}/read/{{ chapter_index + 1 }}"
+                class="btn btn-primary"
+                >下一章 →</a
+            >
+            {% else %}
+            <span class="btn btn-primary disabled">下一章 →</span>
+            {% endif %}
+        </nav>
+    </div>
+</div>
+
+<script src="/static/js/reader.js"></script>
+{% endblock %}

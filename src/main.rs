@@ -33,6 +33,12 @@ async fn main() {
         .route("/", get(handlers::library::home))
         .route("/upload", get(handlers::library::upload_form))
         .route("/book/{id}", get(handlers::library::book_detail))
+        // ── Reader ──────────────────────────────────────
+        .route("/book/{id}/read", get(handlers::reader::read_book))
+        .route(
+            "/book/{id}/read/{chapter}",
+            get(handlers::reader::read_chapter_handler),
+        )
         // ── Cover images ───────────────────────────────
         .route("/covers/{id}", get(handlers::library::cover_image))
         // ── API ────────────────────────────────────────
