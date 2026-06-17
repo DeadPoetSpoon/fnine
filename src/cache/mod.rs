@@ -34,7 +34,6 @@ where
         self.map.lock().unwrap().insert(key, value);
     }
 
-    #[allow(dead_code)]
     pub fn invalidate(&self, key: &K) {
         self.map.lock().unwrap().remove(key);
     }

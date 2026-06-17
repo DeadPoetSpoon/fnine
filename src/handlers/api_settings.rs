@@ -25,6 +25,7 @@ pub struct SettingsForm {
     pub language: String,
     pub theme: String,
     pub font_size: u32,
+    #[serde(default)]
     pub font_family: String,
 }
 

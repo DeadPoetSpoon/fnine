@@ -22,7 +22,7 @@ fn default_font_size() -> u32 {
     18
 }
 fn default_font_family() -> String {
-    "Georgia, serif".into()
+    String::new()
 }
 
 impl Default for Settings {

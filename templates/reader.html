@@ -22,7 +22,7 @@
             <span class="chapter-title">{{ chapter_label }}</span>
         </div>
         <article class="chapter-content" id="chapter-content">
-            <pre class="plain-text" style="font-size: {{ font_size }}px; font-family: {{ font_family }}">{{ chapter_content }}</pre>
+            <pre class="plain-text" style="font-size: {{ font_size }}px;{% if !font_family.is_empty() %} font-family: {{ font_family }};{% endif %}">{{ chapter_content }}</pre>
         </article>
         <nav class="reader-nav">
             {% if chapter_index > 0 %}

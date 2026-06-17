@@ -40,6 +40,11 @@
         <div class="form-group">
             <label class="form-label">Font</label>
             <div class="font-grid">
+                <label class="theme-option {% if settings.font_family.is_empty() %}active{% endif %}">
+                    <input type="radio" name="font_family" value="" {% if settings.font_family.is_empty() %}checked{% endif %}>
+                    <span class="font-preview">Aa</span>
+                    <span class="font-name">Browser Default</span>
+                </label>
                 {% for font in fonts %}
                 <label class="theme-option {% if font.as_str() == settings.font_family.as_str() %}active{% endif %}">
                     <input type="radio" name="font_family" value="{{ font }}" {% if font.as_str() == settings.font_family.as_str() %}checked{% endif %}>

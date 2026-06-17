@@ -1,7 +1,17 @@
 # ---- Stage 1: Planner (cargo-chef) ----
-FROM rust:latest AS chef
-RUN apt-get update && apt-get install -y pkg-config libssl-dev musl-tools && rm -rf /var/lib/apt/lists/*
+FROM library/rust:1.96-alpine3.23 AS chef
+
+# Use domestic Alpine mirror (USTC)
+RUN sed -i 's|dl-cdn.alpinelinux.org|mirrors.ustc.edu.cn|g' /etc/apk/repositories
+
+RUN apk add --no-cache pkgconfig openssl-dev musl-dev
 RUN rustup target add x86_64-unknown-linux-musl
+
+# Use domestic cargo mirror (rsproxy)
+RUN mkdir -p $CARGO_HOME && \
+    printf '[source.crates-io]\nreplace-with = "rsproxy"\n[source.rsproxy]\nregistry = "sparse+https://rsproxy.cn/index/"\n' \
+    > $CARGO_HOME/config.toml
+
 RUN cargo install cargo-chef
 WORKDIR /app
 
@@ -20,8 +30,9 @@ COPY . .
 RUN cargo build --release --target x86_64-unknown-linux-musl
 
 # ---- Stage 5: Runtime (minimal Alpine) ----
-FROM alpine:latest AS runtime
+FROM library/alpine:3.23 AS runtime
 RUN apk add --no-cache ca-certificates
+WORKDIR /app
 COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/fnine /usr/local/bin/fnine
 COPY --from=builder /app/static /app/static
 
