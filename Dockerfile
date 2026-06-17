@@ -1,13 +1,43 @@
+# =============================================================================
+# Multi-architecture Dockerfile for Fnine
+# =============================================================================
+#
+# Supported platforms:
+#   linux/amd64          — x86_64 servers / desktops
+#   linux/arm64          — Raspberry Pi 3/4/5 (64-bit OS)
+#   linux/arm/v7         — older Raspberry Pi (32-bit OS)
+#
+# Single-platform local build:
+#   docker build -t fnine .
+#
+# Multi-platform build + push (requires buildx):
+#   docker buildx create --use
+#   docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 -t ghcr.io/user/fnine --push .
+# =============================================================================
+
 # ---- Stage 1: Planner (cargo-chef) ----
 FROM library/rust:1.96-alpine3.23 AS chef
 
-# Use domestic Alpine mirror (USTC)
+# Map Docker's TARGETPLATFORM to the matching Rust target triple.
+# This ARG is injected automatically by Buildx; falls back to the build host arch.
+ARG TARGETPLATFORM
+RUN echo "[fnine] TARGETPLATFORM = ${TARGETPLATFORM}" && \
+    case "${TARGETPLATFORM}" in \
+      "linux/amd64")   RUST_TARGET="x86_64-unknown-linux-musl" ;; \
+      "linux/arm64")   RUST_TARGET="aarch64-unknown-linux-musl" ;; \
+      "linux/arm/v7")  RUST_TARGET="armv7-unknown-linux-musleabihf" ;; \
+      *)               RUST_TARGET="x86_64-unknown-linux-musl" ;; \
+    esac && \
+    echo "[fnine] Rust target  = ${RUST_TARGET}" && \
+    echo "${RUST_TARGET}" > /rust_target && \
+    rustup target add "${RUST_TARGET}"
+
+# Use domestic Alpine mirror (USTC) — uncomment if building in China
 # RUN sed -i 's|dl-cdn.alpinelinux.org|mirrors.ustc.edu.cn|g' /etc/apk/repositories
 
 RUN apk add --no-cache pkgconfig openssl-dev musl-dev
-RUN rustup target add x86_64-unknown-linux-musl
 
-# Use domestic cargo mirror (rsproxy)
+# Use domestic cargo mirror (rsproxy) — uncomment if building in China
 # RUN mkdir -p $CARGO_HOME && \
 #     printf '[source.crates-io]\nreplace-with = "rsproxy"\n[source.rsproxy]\nregistry = "sparse+https://rsproxy.cn/index/"\n' \
 #     > $CARGO_HOME/config.toml
@@ -20,20 +50,25 @@ FROM chef AS planner
 COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
-# ---- Stage 3: Build dependencies (cached) ----
+# ---- Stage 3: Build dependencies (cached by recipe.json) ----
 FROM chef AS builder
 COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --release --target x86_64-unknown-linux-musl --recipe-path recipe.json
+RUN RUST_TARGET=$(cat /rust_target) && \
+    cargo chef cook --release --target "${RUST_TARGET}" --recipe-path recipe.json
 
 # ---- Stage 4: Build application ----
 COPY . .
-RUN cargo build --release --target x86_64-unknown-linux-musl
+RUN RUST_TARGET=$(cat /rust_target) && \
+    cargo build --release --target "${RUST_TARGET}" && \
+    cp "/app/target/${RUST_TARGET}/release/fnine" /app/fnine
 
 # ---- Stage 5: Runtime (minimal Alpine) ----
 FROM library/alpine:3.23 AS runtime
 RUN apk add --no-cache ca-certificates
 WORKDIR /app
-COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/fnine /usr/local/bin/fnine
+
+# Single common path — the builder stage already copies the correct binary to /app/fnine
+COPY --from=builder /app/fnine /usr/local/bin/fnine
 COPY --from=builder /app/static /app/static
 
 # Data directory via volume mount
