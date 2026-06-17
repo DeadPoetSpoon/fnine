@@ -5,14 +5,16 @@
 # Supported platforms:
 #   linux/amd64          — x86_64 servers / desktops
 #   linux/arm64          — Raspberry Pi 3/4/5 (64-bit OS)
-#   linux/arm/v7         — older Raspberry Pi (32-bit OS)
+#
+# NOTE: linux/arm/v7 (32-bit ARM) is not supported because the official
+# Rust Alpine image does not provide an arm/v7 manifest.
 #
 # Single-platform local build:
 #   docker build -t fnine .
 #
 # Multi-platform build + push (requires buildx):
 #   docker buildx create --use
-#   docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 -t ghcr.io/user/fnine --push .
+#   docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/user/fnine --push .
 # =============================================================================
 
 # ---- Stage 1: Planner (cargo-chef) ----
@@ -25,8 +27,7 @@ RUN echo "[fnine] TARGETPLATFORM = ${TARGETPLATFORM}" && \
     case "${TARGETPLATFORM}" in \
       "linux/amd64")   RUST_TARGET="x86_64-unknown-linux-musl" ;; \
       "linux/arm64")   RUST_TARGET="aarch64-unknown-linux-musl" ;; \
-      "linux/arm/v7")  RUST_TARGET="armv7-unknown-linux-musleabihf" ;; \
-      *)               RUST_TARGET="x86_64-unknown-linux-musl" ;; \
+      *)               echo "ERROR: Unsupported platform ${TARGETPLATFORM}" ; exit 1 ;; \
     esac && \
     echo "[fnine] Rust target  = ${RUST_TARGET}" && \
     echo "${RUST_TARGET}" > /rust_target && \
