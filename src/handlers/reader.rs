@@ -18,13 +18,23 @@ struct ReaderTemplate {
     chapter_content: String,
     toc: Vec<ChapterEntry>,
     chapter_count: usize,
+    initial_position: f64,
 }
 
 // ── Handlers ───────────────────────────────────────────────
 
-/// GET /book/:id/read — redirect to chapter 0
-pub async fn read_book(Path(id): Path<String>) -> Result<Redirect, AppError> {
-    Ok(Redirect::to(&format!("/book/{id}/read/0")))
+/// GET /book/:id/read — redirect to last read chapter
+pub async fn read_book(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Redirect, AppError> {
+    let progress = state.progress.load().await?;
+    let chapter = progress
+        .entries
+        .get(&id)
+        .map(|e| e.chapter as usize)
+        .unwrap_or(0);
+    Ok(Redirect::to(&format!("/book/{id}/read/{chapter}")))
 }
 
 /// GET /book/:id/read/:chapter — read a specific chapter
@@ -51,6 +61,14 @@ pub async fn read_chapter_handler(
     let content = read_chapter(&epub_path, chapter)?;
     let label = toc[chapter].label.clone();
 
+    let progress = state.progress.load().await?;
+    let initial_position = progress
+        .entries
+        .get(&id)
+        .filter(|e| e.chapter == chapter as u32)
+        .map(|e| e.position)
+        .unwrap_or(0.0);
+
     let tmpl = ReaderTemplate {
         book_id: book.id.clone(),
         book_title: book.title.clone(),
@@ -59,6 +77,7 @@ pub async fn read_chapter_handler(
         chapter_content: content,
         toc,
         chapter_count,
+        initial_position,
     };
 
     tmpl.render()

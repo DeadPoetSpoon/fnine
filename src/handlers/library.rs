@@ -3,6 +3,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 
+use crate::db::annotations::Annotation;
 use crate::db::books::Book;
 use crate::error::AppError;
 use crate::state::AppState;
@@ -23,6 +24,7 @@ struct UploadTemplate;
 #[template(path = "book_detail.html")]
 struct BookDetailTemplate<'a> {
     book: &'a Book,
+    annotations: Vec<Annotation>,
 }
 
 // ── Handlers ───────────────────────────────────────────────
@@ -55,7 +57,14 @@ pub async fn book_detail(
         .iter()
         .find(|b| b.id == id)
         .ok_or_else(|| AppError::NotFound("Book not found".into()))?;
-    let tmpl = BookDetailTemplate { book };
+
+    let annot_store = state.annotations_store(&id);
+    let annot_data = annot_store.load().await?;
+
+    let tmpl = BookDetailTemplate {
+        book,
+        annotations: annot_data.annotations,
+    };
     tmpl.render()
         .map(|html| axum::response::Html(html).into_response())
         .map_err(|e| AppError::Internal(e.to_string()))

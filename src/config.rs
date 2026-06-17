@@ -11,7 +11,7 @@ pub struct Config {
 impl Config {
     pub fn from_env() -> Self {
         Self {
-            host: std::env::var("FNINE_HOST").unwrap_or_else(|_| "127.0.0.1".into()),
+            host: std::env::var("FNINE_HOST").unwrap_or_else(|_| "0.0.0.0".into()),
             port: std::env::var("FNINE_PORT")
                 .ok()
                 .and_then(|p| p.parse().ok())

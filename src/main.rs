@@ -27,6 +27,7 @@ async fn main() {
     let _ = tokio::fs::create_dir_all(&config.data_dir).await;
     let _ = tokio::fs::create_dir_all(state.books_dir()).await;
     let _ = tokio::fs::create_dir_all(state.covers_dir()).await;
+    let _ = tokio::fs::create_dir_all(config.data_dir.join("annotations")).await;
 
     let app = Router::new()
         // ── Pages ──────────────────────────────────────
@@ -48,6 +49,18 @@ async fn main() {
                 .layer(RequestBodyLimitLayer::new(50 * 1024 * 1024)), // 50 MB
         )
         .route("/book/{id}/delete", post(handlers::api_books::delete_book))
+        // ── Progress ───────────────────────────────────
+        .route("/api/progress", post(handlers::api_progress::save_progress))
+        // ── Annotations ───────────────────────────────
+        .route(
+            "/api/book/{id}/annotations",
+            get(handlers::api_annotations::list_annotations)
+                .post(handlers::api_annotations::create_annotation),
+        )
+        .route(
+            "/api/book/{id}/annotations/{aid}",
+            post(handlers::api_annotations::delete_annotation),
+        )
         // ── Static files ───────────────────────────────
         .nest_service("/static", ServeDir::new("static"))
         .layer(DefaultBodyLimit::disable())

@@ -1,6 +1,12 @@
 {% extends "base.html" %} {% block title %}{{ chapter_label }} — {{ book_title
 }}{% endblock %} {% block content %}
-<div class="reader-layout" id="reader-app">
+<div
+    class="reader-layout"
+    id="reader-app"
+    data-book-id="{{ book_id }}"
+    data-chapter="{{ chapter_index }}"
+    data-position="{{ initial_position }}"
+>
     <aside class="toc-sidebar" id="toc-sidebar">
         <div class="toc-header">
             <h3>目录</h3>
