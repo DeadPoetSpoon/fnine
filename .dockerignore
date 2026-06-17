@@ -1,0 +1,22 @@
+# Rust
+target/
+**/*.rs.bk
+
+# Data
+data/
+
+# Git
+.git/
+.gitignore
+
+# Docs
+*.md
+plan.md
+
+# IDE
+.vscode/
+.idea/
+
+# Docker
+Dockerfile
+.dockerignore
