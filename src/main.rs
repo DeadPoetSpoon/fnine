@@ -3,6 +3,7 @@ mod db;
 mod epub;
 mod error;
 mod handlers;
+mod i18n;
 mod state;
 
 use axum::extract::DefaultBodyLimit;
@@ -27,6 +28,7 @@ async fn main() {
     let _ = tokio::fs::create_dir_all(&config.data_dir).await;
     let _ = tokio::fs::create_dir_all(state.books_dir()).await;
     let _ = tokio::fs::create_dir_all(state.covers_dir()).await;
+    let _ = tokio::fs::create_dir_all(state.fonts_dir()).await;
     let _ = tokio::fs::create_dir_all(config.data_dir.join("annotations")).await;
 
     let app = Router::new()
@@ -34,6 +36,16 @@ async fn main() {
         .route("/", get(handlers::library::home))
         .route("/upload", get(handlers::library::upload_form))
         .route("/book/{id}", get(handlers::library::book_detail))
+        // ── Settings ────────────────────────────────────
+        .route(
+            "/settings",
+            get(handlers::api_settings::settings_page).post(handlers::api_settings::save_settings),
+        )
+        .route("/settings/fonts", post(handlers::api_settings::upload_font))
+        .route(
+            "/settings/fonts/delete",
+            post(handlers::api_settings::delete_font),
+        )
         // ── Reader ──────────────────────────────────────
         .route("/book/{id}/read", get(handlers::reader::read_book))
         .route(
@@ -63,6 +75,7 @@ async fn main() {
         )
         // ── Static files ───────────────────────────────
         .nest_service("/static", ServeDir::new("static"))
+        .nest_service("/fonts", ServeDir::new(config.data_dir.join("fonts")))
         .layer(DefaultBodyLimit::disable())
         .with_state(state);
 

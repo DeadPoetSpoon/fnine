@@ -1,19 +1,5 @@
 // Reader UI controller
 (function () {
-  // ── Theme ──────────────────────────────────────────
-  function getTheme() {
-    return localStorage.getItem("fnine-theme") || "light";
-  }
-
-  function applyTheme(theme) {
-    document.documentElement.dataset.theme = theme;
-    var btn = document.getElementById("theme-btn");
-    if (btn) {
-      var icons = { light: "☀️", dark: "🌙", sepia: "📜" };
-      btn.textContent = icons[theme] || "☀️";
-    }
-  }
-
   // ── Sidebar ────────────────────────────────────────
   var sidebarHidden = localStorage.getItem("fnine-sidebar") === "hidden";
 
@@ -61,14 +47,6 @@
     var btn = el.closest("button");
     if (!btn) return;
 
-    if (btn.id === "theme-btn") {
-      var themes = ["light", "dark", "sepia"];
-      var cur = getTheme();
-      var next = themes[(themes.indexOf(cur) + 1) % themes.length];
-      localStorage.setItem("fnine-theme", next);
-      applyTheme(next);
-    }
-
     if (btn.getAttribute("data-action") === "hide-sidebar") {
       hideSidebar();
     }
@@ -79,7 +57,6 @@
   });
 
   // ── Init ───────────────────────────────────────────
-  applyTheme(getTheme());
   applySidebar();
 
   // ── Progress auto-save ─────────────────────────────

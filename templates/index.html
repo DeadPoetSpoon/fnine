@@ -1,14 +1,20 @@
-{% extends "base.html" %} {% block title %}书库 — Fnine{% endblock %} {% block
-content %} {% if books.len() == 0 %}
+{% extends "base.html" %} {% block content %} {% if books.len() == 0 %}
 <div class="empty-state">
-    <p>📖 还没有书籍,快去上传一本吧!</p>
-    <a href="/upload" class="btn btn-primary">上传书籍</a>
+    <p>📖 {{ t.get("book.no_books") }}</p>
+    <a
+        href="/upload?lang={{ t.lang() }}&theme={{ theme }}"
+        class="btn btn-primary"
+        >{{ t.get("book.upload_btn") }}</a
+    >
 </div>
 {% else %}
 <div class="book-grid">
     {% for book in books %}
     <div class="book-card">
-        <a href="/book/{{ book.id }}" class="book-cover-link">
+        <a
+            href="/book/{{ book.id }}?lang={{ t.lang() }}&theme={{ theme }}"
+            class="book-cover-link"
+        >
             {% if book.cover_ext.is_some() %}
             <img
                 src="/covers/{{ book.id }}"
@@ -22,11 +28,16 @@ content %} {% if books.len() == 0 %}
         </a>
         <div class="book-info">
             <h3 class="book-title">
-                <a href="/book/{{ book.id }}">{{ book.title }}</a>
+                <a
+                    href="/book/{{ book.id }}?lang={{ t.lang() }}&theme={{ theme }}"
+                    >{{ book.title }}</a
+                >
             </h3>
             <p class="book-author">{{ book.author }}</p>
             <div class="book-meta">
-                <span>{{ book.chapter_count }} 章</span>
+                <span
+                    >{{ book.chapter_count }} {{ t.get("book.chapters") }}</span
+                >
             </div>
         </div>
     </div>

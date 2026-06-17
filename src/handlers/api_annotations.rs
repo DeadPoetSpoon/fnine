@@ -1,9 +1,11 @@
 use axum::Json;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::response::Redirect;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+
+use std::collections::HashMap;
 
 use crate::db::annotations::Annotation;
 use crate::error::AppError;
@@ -54,7 +56,6 @@ impl From<Annotation> for AnnotationOutput {
     }
 }
 
-/// GET /api/book/:id/annotations
 pub async fn list_annotations(
     State(state): State<AppState>,
     Path(book_id): Path<String>,
@@ -65,7 +66,6 @@ pub async fn list_annotations(
     Ok(Json(list))
 }
 
-/// POST /api/book/:id/annotations
 pub async fn create_annotation(
     State(state): State<AppState>,
     Path(book_id): Path<String>,
@@ -93,15 +93,19 @@ pub async fn create_annotation(
     Ok(Json(output))
 }
 
-/// POST /api/book/:id/annotations/:aid — delete (form submit)
 pub async fn delete_annotation(
     State(state): State<AppState>,
     Path((book_id, aid)): Path<(String, String)>,
+    Query(query): Query<HashMap<String, String>>,
 ) -> Result<Redirect, AppError> {
+    let lang = query.get("lang").map(|s| s.as_str()).unwrap_or("zh");
+    let theme = query.get("theme").map(|s| s.as_str()).unwrap_or("light");
     let store = state.annotations_store(&book_id);
     let mut data = store.load().await?;
     data.annotations.retain(|a| a.id != aid);
     store.save(&data).await?;
 
-    Ok(Redirect::to(&format!("/book/{book_id}")))
+    Ok(Redirect::to(&format!(
+        "/book/{book_id}?lang={lang}&theme={theme}"
+    )))
 }

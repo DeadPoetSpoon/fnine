@@ -1,0 +1,33 @@
+[nav]
+home = "Library"
+upload = "Upload"
+settings = "Settings"
+
+[book]
+progress = "Reading Progress"
+no_books = "No books yet. Upload one!"
+chapters = "chapters"
+file_size = "File size"
+uploaded = "Uploaded"
+start_reading = "Start Reading"
+delete = "Delete"
+delete_confirm = "Are you sure you want to delete this book?"
+upload_title = "Upload EPUB"
+upload_hint = "Supports .epub format (EPUB 2 / EPUB 3)"
+upload_btn = "Upload"
+cancel = "Cancel"
+
+[reader]
+prev_chapter = "Previous"
+next_chapter = "Next"
+toc = "Table of Contents"
+theme = "Theme"
+hide_toc = "Hide TOC"
+open_toc = "Open TOC"
+
+[annotation]
+title = "Annotations & Notes"
+add = "Annotate"
+confirm = "Confirm"
+placeholder = "Write your thoughts..."
+chapter_label = "Chapter {}"

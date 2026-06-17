@@ -1,50 +1,26 @@
-{% extends "base.html" %} {% block title %}{{ book.title }} — Fnine{% endblock
-%} {% block content %}
+{% extends "base.html" %}
+
+{% block content %}
 <div class="book-detail">
     <div class="book-detail-cover">
         {% if book.cover_ext.is_some() %}
-        <img
-            src="/covers/{{ book.id }}"
-            alt="{{ book.title }}"
-            class="cover-large"
-        />
+        <img src="/covers/{{ book.id }}" alt="{{ book.title }}" class="cover-large">
         {% else %}
         <div class="cover-placeholder-large">📘</div>
         {% endif %}
     </div>
-
     <div class="book-detail-info">
         <h1>{{ book.title }}</h1>
         <p class="author">{{ book.author }}</p>
-
         <div class="meta-grid">
-            <div class="meta-item">
-                <span class="meta-label">章节</span>
-                <span class="meta-value">{{ book.chapter_count }}</span>
-            </div>
-            <div class="meta-item">
-                <span class="meta-label">文件大小</span>
-                <span class="meta-value"
-                    >{{ book.file_size / 1024 / 1024 }} MB</span
-                >
-            </div>
-            <div class="meta-item">
-                <span class="meta-label">上传时间</span>
-                <span class="meta-value">{{ book.uploaded_at }}</span>
-            </div>
+            <div class="meta-item"><span class="meta-label">{{ t.get("book.chapters") }}</span><span class="meta-value">{{ book.chapter_count }}</span></div>
+            <div class="meta-item"><span class="meta-label">{{ t.get("book.file_size") }}</span><span class="meta-value">{{ file_size_display }}</span></div>
+            <div class="meta-item"><span class="meta-label">{{ t.get("book.uploaded") }}</span><span class="meta-value">{{ book.uploaded_at }}</span></div>
         </div>
-
         <div class="book-actions">
-            <a href="/book/{{ book.id }}/read" class="btn btn-primary btn-lg"
-                >📖 开始阅读</a
-            >
-            <form
-                action="/book/{{ book.id }}/delete"
-                method="post"
-                onsubmit="return confirm('确定要删除《{{ book.title }}》吗?')"
-                style="display: inline"
-            >
-                <button type="submit" class="btn btn-danger">🗑 删除</button>
+            <a href="/book/{{ book.id }}/read?lang={{ t.lang() }}&theme={{ theme }}" class="btn btn-primary btn-lg">📖 {{ t.get("book.start_reading") }}</a>
+            <form action="/book/{{ book.id }}/delete?lang={{ t.lang() }}&theme={{ theme }}" method="post" onsubmit="return confirm('{{ t.get("book.delete_confirm") }}')" style="display: inline">
+                <button type="submit" class="btn btn-danger">🗑 {{ t.get("book.delete") }}</button>
             </form>
         </div>
     </div>
@@ -52,33 +28,21 @@
 
 {% if !annotations.is_empty() %}
 <section class="annotations-section">
-    <h2>标注与想法</h2>
+    <h2>{{ t.get("annotation.title") }}</h2>
     <div class="annotations-list">
         {% for a in annotations %}
         <div class="annotation-item">
             <div class="annotation-body">
-                <blockquote class="annotation-quote">
-                    {{ a.selected_text }}
-                </blockquote>
-                {% if a.note.is_some() %}
-                <p class="annotation-note">💬 {{ a.note.as_ref().unwrap() }}</p>
-                {% endif %}
-                <span class="annotation-meta">
-                    第 {{ a.chapter + 1 }} 章 · {{ a.created_at }}
-                </span>
+                <blockquote class="annotation-quote">{{ a.selected_text }}</blockquote>
+                {% if a.note.is_some() %}<p class="annotation-note">💬 {{ a.note.as_ref().unwrap() }}</p>{% endif %}
+                <span class="annotation-meta">第 {{ a.chapter + 1 }} 章 · {{ a.created_at }}</span>
             </div>
-            <form
-                action="/api/book/{{ book.id }}/annotations/{{ a.id }}"
-                method="post"
-                class="annotation-delete-form"
-            >
-                <input type="hidden" name="_method" value="DELETE" />
-                <button type="submit" class="btn-icon" title="删除标注">
-                    ✕
-                </button>
+            <form action="/api/book/{{ book.id }}/annotations/{{ a.id }}?lang={{ t.lang() }}&theme={{ theme }}" method="post" class="annotation-delete-form">
+                <button type="submit" class="btn-icon" title="{{ t.get("book.delete") }}">✕</button>
             </form>
         </div>
         {% endfor %}
     </div>
 </section>
-{% endif %} {% endblock %}
+{% endif %}
+{% endblock %}

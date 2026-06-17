@@ -2,6 +2,7 @@ use crate::config::Config;
 use crate::db::annotations::AnnotationsData;
 use crate::db::books::BooksData;
 use crate::db::progress::ProgressData;
+use crate::db::settings::Settings;
 use crate::db::store::Store;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -11,6 +12,7 @@ pub struct AppState {
     pub config: Config,
     pub books: Arc<Store<BooksData>>,
     pub progress: Arc<Store<ProgressData>>,
+    pub settings: Arc<Store<Settings>>,
 }
 
 impl AppState {
@@ -19,6 +21,7 @@ impl AppState {
         Self {
             books: Arc::new(Store::new(data.join("books.toml"))),
             progress: Arc::new(Store::new(data.join("progress.toml"))),
+            settings: Arc::new(Store::new(data.join("settings.toml"))),
             config,
         }
     }
@@ -29,6 +32,10 @@ impl AppState {
 
     pub fn covers_dir(&self) -> PathBuf {
         self.config.data_dir.join("covers")
+    }
+
+    pub fn fonts_dir(&self) -> PathBuf {
+        self.config.data_dir.join("fonts")
     }
 
     /// Per-book annotations store: `data/annotations/{book_id}.toml`

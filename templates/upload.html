@@ -1,7 +1,6 @@
-{% extends "base.html" %} {% block title %}上传书籍 — Fnine{% endblock %} {%
-block content %}
+{% extends "base.html" %} {% block content %}
 <form
-    action="/upload"
+    action="/upload?lang={{ t.lang() }}&theme={{ theme }}"
     method="post"
     enctype="multipart/form-data"
     class="upload-form"
@@ -10,8 +9,8 @@ block content %}
         <label for="file-input" class="file-label">
             <div class="file-dropzone">
                 <span class="file-icon">📂</span>
-                <p>点击选择 EPUB 文件,或拖放到此处</p>
-                <p class="file-hint">支持 .epub 格式 (EPUB 2 / EPUB 3)</p>
+                <p>{{ t.get("book.upload_title") }}</p>
+                <p class="file-hint">{{ t.get("book.upload_hint") }}</p>
             </div>
         </label>
         <input
@@ -23,26 +22,29 @@ block content %}
             class="file-input"
         />
     </div>
-
     <div class="form-actions">
-        <button type="submit" class="btn btn-primary">上传</button>
-        <a href="/" class="btn btn-secondary">取消</a>
+        <button type="submit" class="btn btn-primary">
+            {{ t.get("book.upload_btn") }}
+        </button>
+        <a
+            href="/?lang={{ t.lang() }}&theme={{ theme }}"
+            class="btn btn-secondary"
+            >{{ t.get("book.cancel") }}</a
+        >
     </div>
 </form>
-
 <script>
-    // Show selected filename
     document
         .getElementById("file-input")
         .addEventListener("change", function (e) {
-            const file = e.target.files[0];
+            var file = e.target.files[0];
             if (file) {
-                const dropzone = document.querySelector(".file-dropzone");
-                dropzone.querySelector(".file-icon").textContent = "📚";
-                dropzone.querySelector("p").textContent = file.name;
-                dropzone.querySelector(".file-hint").textContent =
+                var dz = document.querySelector(".file-dropzone");
+                dz.querySelector(".file-icon").textContent = "📚";
+                dz.querySelector("p").textContent = file.name;
+                dz.querySelector(".file-hint").textContent =
                     (file.size / 1024 / 1024).toFixed(1) + " MB";
-                dropzone.classList.add("has-file");
+                dz.classList.add("has-file");
             }
         });
 </script>

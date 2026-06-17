@@ -1,11 +1,13 @@
 use askama::Template;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use std::collections::HashMap;
 
 use crate::db::annotations::Annotation;
 use crate::db::books::Book;
 use crate::error::AppError;
+use crate::i18n::translations::Translations;
 use crate::state::AppState;
 
 // ── Templates ──────────────────────────────────────────────
@@ -14,33 +16,68 @@ use crate::state::AppState;
 #[template(path = "index.html")]
 struct IndexTemplate<'a> {
     books: &'a [Book],
+    t: &'a Translations,
+    theme: &'a str,
 }
 
 #[derive(Template)]
 #[template(path = "upload.html")]
-struct UploadTemplate;
+struct UploadTemplate<'a> {
+    t: &'a Translations,
+    theme: &'a str,
+}
 
 #[derive(Template)]
 #[template(path = "book_detail.html")]
 struct BookDetailTemplate<'a> {
     book: &'a Book,
     annotations: Vec<Annotation>,
+    file_size_display: String,
+    t: &'a Translations,
+    theme: &'a str,
 }
 
 // ── Handlers ───────────────────────────────────────────────
 
+fn load_translations(query: &HashMap<String, String>) -> (Translations, String) {
+    let lang = query
+        .get("lang")
+        .map(|s| s.as_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or("zh");
+    let theme = query
+        .get("theme")
+        .map(|s| s.as_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or("light")
+        .to_string();
+    (Translations::load(lang), theme)
+}
+
 /// GET / — library home page
-pub async fn home(State(state): State<AppState>) -> Result<Response, AppError> {
+pub async fn home(
+    State(state): State<AppState>,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Response, AppError> {
     let data = state.books.load().await?;
-    let tmpl = IndexTemplate { books: &data.books };
+    let (t, theme) = load_translations(&query);
+    let tmpl = IndexTemplate {
+        books: &data.books,
+        t: &t,
+        theme: &theme,
+    };
     tmpl.render()
         .map(|html| axum::response::Html(html).into_response())
         .map_err(|e| AppError::Internal(e.to_string()))
 }
 
 /// GET /upload — upload form
-pub async fn upload_form() -> impl IntoResponse {
-    let tmpl = UploadTemplate;
+pub async fn upload_form(Query(query): Query<HashMap<String, String>>) -> impl IntoResponse {
+    let (t, theme) = load_translations(&query);
+    let tmpl = UploadTemplate {
+        t: &t,
+        theme: &theme,
+    };
     tmpl.render()
         .map(axum::response::Html)
         .map_err(|e| AppError::Internal(e.to_string()))
@@ -50,6 +87,7 @@ pub async fn upload_form() -> impl IntoResponse {
 pub async fn book_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
+    Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
     let data = state.books.load().await?;
     let book = data
@@ -60,10 +98,22 @@ pub async fn book_detail(
 
     let annot_store = state.annotations_store(&id);
     let annot_data = annot_store.load().await?;
+    let (t, theme) = load_translations(&query);
+
+    let file_size_display = if book.file_size < 1024 {
+        format!("{} B", book.file_size)
+    } else if book.file_size < 1048576 {
+        format!("{:.1} KB", book.file_size as f64 / 1024.0)
+    } else {
+        format!("{:.1} MB", book.file_size as f64 / 1048576.0)
+    };
 
     let tmpl = BookDetailTemplate {
         book,
         annotations: annot_data.annotations,
+        file_size_display,
+        t: &t,
+        theme: &theme,
     };
     tmpl.render()
         .map(|html| axum::response::Html(html).into_response())

@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="settings-page">
+    <form action="/settings?lang={{ t.lang() }}&theme={{ theme }}" method="post" class="settings-form">
+        <h2>{{ t.get("nav.settings") }}</h2>
+
+        <div class="form-group">
+            <label class="form-label">Language / 语言</label>
+            <div class="theme-options">
+                <label class="theme-option {% if settings.language == "zh" %}active{% endif %}">
+                    <input type="radio" name="language" value="zh" {% if settings.language == "zh" %}checked{% endif %}>
+                    <span>中文</span>
+                </label>
+                <label class="theme-option {% if settings.language == "en" %}active{% endif %}">
+                    <input type="radio" name="language" value="en" {% if settings.language == "en" %}checked{% endif %}>
+                    <span>English</span>
+                </label>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">{{ t.get("reader.theme") }}</label>
+            <div class="theme-options">
+                <label class="theme-option {% if settings.theme == "light" %}active{% endif %}">
+                    <input type="radio" name="theme" value="light" {% if settings.theme == "light" %}checked{% endif %}>
+                    <span class="theme-preview light"></span><span>Light</span>
+                </label>
+                <label class="theme-option {% if settings.theme == "dark" %}active{% endif %}">
+                    <input type="radio" name="theme" value="dark" {% if settings.theme == "dark" %}checked{% endif %}>
+                    <span class="theme-preview dark"></span><span>Dark</span>
+                </label>
+                <label class="theme-option {% if settings.theme == "sepia" %}active{% endif %}">
+                    <input type="radio" name="theme" value="sepia" {% if settings.theme == "sepia" %}checked{% endif %}>
+                    <span class="theme-preview sepia"></span><span>Sepia</span>
+                </label>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Font</label>
+            <div class="font-grid">
+                {% for font in fonts %}
+                <label class="theme-option {% if font.as_str() == settings.font_family.as_str() %}active{% endif %}">
+                    <input type="radio" name="font_family" value="{{ font }}" {% if font.as_str() == settings.font_family.as_str() %}checked{% endif %}>
+                    <span class="font-preview">Aa</span>
+                    <span class="font-name">{{ font }}</span>
+                </label>
+                {% endfor %}
+                <label class="theme-option upload-font-btn" onclick="document.getElementById('font-upload-input').click()">
+                    <span class="font-preview">+</span>
+                    <span class="font-name">Upload</span>
+                </label>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label" for="font-size">Font Size</label>
+            <div class="font-size-row">
+                <input type="range" id="font-size" name="font_size" value="{{ settings.font_size }}" min="12" max="32" oninput="document.getElementById('fs-val').textContent = this.value + 'px'">
+                <span class="font-size-value" id="fs-val">{{ settings.font_size }}px</span>
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save</button>
+            <a href="/?lang={{ t.lang() }}&theme={{ theme }}" class="btn btn-secondary">{{ t.get("book.cancel") }}</a>
+        </div>
+
+    </form>
+</div>
+
+<form id="font-upload-form" action="/settings/fonts" method="post" enctype="multipart/form-data" hidden>
+    <input type="file" id="font-upload-input" name="font" accept=".ttf,.woff2" onchange="this.form.submit()">
+</form>
+
+<script>
+document.querySelectorAll('.theme-option input').forEach(function (radio) {
+    radio.addEventListener('change', function () {
+        var group = this.closest('.theme-options, .font-grid');
+        if (group) {
+            group.querySelectorAll('.theme-option').forEach(function (l) {
+                l.classList.remove('active');
+            });
+        }
+        this.closest('.theme-option').classList.add('active');
+    });
+});
+</script>
+{% endblock %}

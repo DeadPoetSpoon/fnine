@@ -1,0 +1,33 @@
+[nav]
+home = "书库"
+upload = "上传"
+settings = "设置"
+
+[book]
+progress = "阅读进度"
+no_books = "还没有书籍，去上传一本吧"
+chapters = "章"
+file_size = "文件大小"
+uploaded = "上传时间"
+start_reading = "开始阅读"
+delete = "删除"
+delete_confirm = "确定要删除这本书吗？"
+upload_title = "上传 EPUB"
+upload_hint = "支持 .epub 格式 (EPUB 2 / EPUB 3)"
+upload_btn = "上传"
+cancel = "取消"
+
+[reader]
+prev_chapter = "上一章"
+next_chapter = "下一章"
+toc = "目录"
+theme = "主题"
+hide_toc = "隐藏目录"
+open_toc = "打开目录"
+
+[annotation]
+title = "标注与想法"
+add = "标注"
+confirm = "确定"
+placeholder = "写点想法..."
+chapter_label = "第 {} 章"
