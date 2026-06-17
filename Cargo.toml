@@ -7,7 +7,6 @@ edition = "2024"
 askama = { version = "0.16.0", features = ["std", "derive"] }
 axum = { version = "0.8.9", features = ["multipart"] }
 chrono = { version = "0.4.45", features = ["serde"] }
-foyer = { version = "0.22.3", features = ["runtime-tokio"] }
 rbook = "0.7.9"
 serde = { version = "1.0.228", features = ["derive"] }
 tokio = { version = "1.52.3", features = ["full"] }
