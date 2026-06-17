@@ -1,3 +1,4 @@
+mod cache;
 mod config;
 mod db;
 mod epub;
@@ -36,6 +37,8 @@ async fn main() {
         .route("/", get(handlers::library::home))
         .route("/upload", get(handlers::library::upload_form))
         .route("/book/{id}", get(handlers::library::book_detail))
+        // ── Search ──────────────────────────────────────
+        .route("/search", get(handlers::search::search))
         // ── Settings ────────────────────────────────────
         .route(
             "/settings",

@@ -4,3 +4,4 @@ pub mod api_progress;
 pub mod api_settings;
 pub mod library;
 pub mod reader;
+pub mod search;

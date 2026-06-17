@@ -70,7 +70,14 @@ pub async fn read_chapter_handler(
         return Err(AppError::NotFound("Chapter not found".into()));
     }
 
-    let content = read_chapter(&epub_path, chapter)?;
+    let cache_key = format!("{}:ch:{}", book.id, chapter);
+    let content = if let Some(cached) = state.chapter_cache.get(&cache_key) {
+        cached
+    } else {
+        let text = read_chapter(&epub_path, chapter)?;
+        state.chapter_cache.insert(cache_key, text.clone());
+        text
+    };
     let label = toc[chapter].label.clone();
 
     let progress = state.progress.load().await?;
@@ -89,7 +96,13 @@ pub async fn read_chapter_handler(
         .unwrap_or("light");
     let t = Translations::load(lang);
 
-    let settings = state.settings.load().await?;
+    let settings = if let Some(cached) = state.settings_cache.get(&()) {
+        cached
+    } else {
+        let s = state.settings.load().await?;
+        state.settings_cache.insert((), s.clone());
+        s
+    };
     let font_family =
         if settings.font_family.ends_with(".ttf") || settings.font_family.ends_with(".woff2") {
             settings

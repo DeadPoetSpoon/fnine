@@ -59,10 +59,16 @@ pub async fn home(
     State(state): State<AppState>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
-    let data = state.books.load().await?;
+    let books = if let Some(cached) = state.books_cache.get(&()) {
+        cached
+    } else {
+        let data = state.books.load().await?;
+        state.books_cache.insert((), data.books.clone());
+        data.books
+    };
     let (t, theme) = load_translations(&query);
     let tmpl = IndexTemplate {
-        books: &data.books,
+        books: &books,
         t: &t,
         theme: &theme,
     };

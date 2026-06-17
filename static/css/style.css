@@ -911,3 +911,25 @@ body {
 .font-upload-form {
     display: none;
 }
+
+/* === Search === */
+.search-form {
+    display: flex;
+    gap: 0.5rem;
+    max-width: 500px;
+    margin: 1rem 0 2rem;
+}
+
+.search-input {
+    flex: 1;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    font-size: 0.95rem;
+    background: var(--color-surface);
+    color: var(--color-text);
+}
+
+.search-results {
+    margin-top: 1rem;
+}

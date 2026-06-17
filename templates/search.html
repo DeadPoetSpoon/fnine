@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Search{% if !query.is_empty() %}: {{ query }}{% endif %}</h2>
+
+<form action="/search" method="get" class="search-form">
+    <input type="hidden" name="lang" value="{{ t.lang() }}">
+    <input type="hidden" name="theme" value="{{ theme }}">
+    <input type="text" name="q" value="{{ query }}" placeholder="Search books..." class="search-input" autofocus>
+    <button type="submit" class="btn btn-primary">Search</button>
+</form>
+
+{% if !query.is_empty() %}
+<div class="search-results">
+    {% if results.is_empty() %}
+    <p class="empty-state">No results found.</p>
+    {% else %}
+    <div class="book-grid">
+        {% for book in results %}
+        <div class="book-card">
+            <a href="/book/{{ book.id }}?lang={{ t.lang() }}&theme={{ theme }}" class="book-cover-link">
+                {% if book.cover_ext.is_some() %}
+                <img src="/covers/{{ book.id }}" alt="{{ book.title }}" class="book-cover" loading="lazy">
+                {% else %}
+                <div class="book-cover-placeholder">📘</div>
+                {% endif %}
+            </a>
+            <div class="book-info">
+                <h3 class="book-title"><a href="/book/{{ book.id }}?lang={{ t.lang() }}&theme={{ theme }}">{{ book.title }}</a></h3>
+                <p class="book-author">{{ book.author }}</p>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

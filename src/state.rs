@@ -1,6 +1,7 @@
+use crate::cache::Cache;
 use crate::config::Config;
 use crate::db::annotations::AnnotationsData;
-use crate::db::books::BooksData;
+use crate::db::books::{Book, BooksData};
 use crate::db::progress::ProgressData;
 use crate::db::settings::Settings;
 use crate::db::store::Store;
@@ -13,6 +14,9 @@ pub struct AppState {
     pub books: Arc<Store<BooksData>>,
     pub progress: Arc<Store<ProgressData>>,
     pub settings: Arc<Store<Settings>>,
+    pub chapter_cache: Cache<String, String>,
+    pub books_cache: Cache<(), Vec<Book>>,
+    pub settings_cache: Cache<(), Settings>,
 }
 
 impl AppState {
@@ -22,6 +26,9 @@ impl AppState {
             books: Arc::new(Store::new(data.join("books.toml"))),
             progress: Arc::new(Store::new(data.join("progress.toml"))),
             settings: Arc::new(Store::new(data.join("settings.toml"))),
+            chapter_cache: Cache::new(),
+            books_cache: Cache::new(),
+            settings_cache: Cache::new(),
             config,
         }
     }
