@@ -2,15 +2,15 @@
 FROM library/rust:1.96-alpine3.23 AS chef
 
 # Use domestic Alpine mirror (USTC)
-RUN sed -i 's|dl-cdn.alpinelinux.org|mirrors.ustc.edu.cn|g' /etc/apk/repositories
+# RUN sed -i 's|dl-cdn.alpinelinux.org|mirrors.ustc.edu.cn|g' /etc/apk/repositories
 
 RUN apk add --no-cache pkgconfig openssl-dev musl-dev
 RUN rustup target add x86_64-unknown-linux-musl
 
 # Use domestic cargo mirror (rsproxy)
-RUN mkdir -p $CARGO_HOME && \
-    printf '[source.crates-io]\nreplace-with = "rsproxy"\n[source.rsproxy]\nregistry = "sparse+https://rsproxy.cn/index/"\n' \
-    > $CARGO_HOME/config.toml
+# RUN mkdir -p $CARGO_HOME && \
+#     printf '[source.crates-io]\nreplace-with = "rsproxy"\n[source.rsproxy]\nregistry = "sparse+https://rsproxy.cn/index/"\n' \
+#     > $CARGO_HOME/config.toml
 
 RUN cargo install cargo-chef
 WORKDIR /app
