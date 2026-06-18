@@ -66,6 +66,8 @@ async fn main() {
         .route("/book/{id}/delete", post(handlers::api_books::delete_book))
         // ── Progress ───────────────────────────────────
         .route("/api/progress", post(handlers::api_progress::save_progress))
+        // ── Recent book ────────────────────────────────
+        .route("/api/recent", get(handlers::api_recent::recent_book))
         // ── Annotations ───────────────────────────────
         .route(
             "/api/book/{id}/annotations",

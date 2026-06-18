@@ -59,13 +59,7 @@ pub async fn home(
     State(state): State<AppState>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
-    let books = if let Some(cached) = state.books_cache.get(&()) {
-        cached
-    } else {
-        let data = state.books.load().await?;
-        state.books_cache.insert((), data.books.clone());
-        data.books
-    };
+    let books = state.load_books().await?;
     let (t, theme) = load_translations(&query);
     let tmpl = IndexTemplate {
         books: &books,
@@ -95,9 +89,8 @@ pub async fn book_detail(
     Path(id): Path<String>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
-    let data = state.books.load().await?;
-    let book = data
-        .books
+    let books = state.load_books().await?;
+    let book = books
         .iter()
         .find(|b| b.id == id)
         .ok_or_else(|| AppError::NotFound("Book not found".into()))?;
@@ -131,9 +124,8 @@ pub async fn cover_image(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Response, AppError> {
-    let data = state.books.load().await?;
-    let book = data
-        .books
+    let books = state.load_books().await?;
+    let book = books
         .iter()
         .find(|b| b.id == id)
         .ok_or_else(|| AppError::NotFound("Book not found".into()))?;

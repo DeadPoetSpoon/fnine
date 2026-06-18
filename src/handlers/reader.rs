@@ -37,7 +37,7 @@ pub async fn read_book(
 ) -> Result<Redirect, AppError> {
     let lang = query.get("lang").map(|s| s.as_str()).unwrap_or("zh");
     let theme = query.get("theme").map(|s| s.as_str()).unwrap_or("light");
-    let progress = state.progress.load().await?;
+    let progress = state.load_progress().await?;
     let chapter = progress
         .entries
         .get(&id)
@@ -54,9 +54,8 @@ pub async fn read_chapter_handler(
     Path((id, chapter)): Path<(String, usize)>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
-    let data = state.books.load().await?;
-    let book = data
-        .books
+    let books = state.load_books().await?;
+    let book = books
         .iter()
         .find(|b| b.id == id)
         .ok_or_else(|| AppError::NotFound("Book not found".into()))?;
@@ -80,7 +79,7 @@ pub async fn read_chapter_handler(
     };
     let label = toc[chapter].label.clone();
 
-    let progress = state.progress.load().await?;
+    let progress = state.load_progress().await?;
     let initial_position = progress
         .entries
         .get(&id)
@@ -96,13 +95,7 @@ pub async fn read_chapter_handler(
         .unwrap_or("light");
     let t = Translations::load(lang);
 
-    let settings = if let Some(cached) = state.settings_cache.get(&()) {
-        cached
-    } else {
-        let s = state.settings.load().await?;
-        state.settings_cache.insert((), s.clone());
-        s
-    };
+    let settings = state.load_settings().await?;
     let font_family =
         if settings.font_family.ends_with(".ttf") || settings.font_family.ends_with(".woff2") {
             settings

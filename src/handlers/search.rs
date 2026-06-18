@@ -34,13 +34,13 @@ pub async fn search(
     let theme = params.get("theme").map(|s| s.as_str()).unwrap_or("light");
     let t = Translations::load(lang);
 
-    let data = state.books.load().await?;
+    let books = state.load_books().await?;
 
     let results: Vec<&Book> = if q.is_empty() {
         Vec::new()
     } else {
         let q_lower = q.to_lowercase();
-        data.books
+        books
             .iter()
             .filter(|b| {
                 b.title.to_lowercase().contains(&q_lower)

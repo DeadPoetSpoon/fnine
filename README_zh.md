@@ -150,6 +150,7 @@ fnine/
 | `POST` | `/settings/fonts`                     | 上传字体文件         |
 | `POST` | `/settings/fonts/delete`              | 删除字体文件         |
 | `POST` | `/api/progress`                       | 保存阅读进度         |
+| `GET`  | `/api/recent`                          | 最近阅读的书籍 (JSON) |
 | `GET`  | `/api/book/{id}/annotations`          | 列出标注             |
 | `POST` | `/api/book/{id}/annotations`          | 创建标注             |
 | `POST` | `/api/book/{id}/annotations/{aid}`    | 删除标注             |

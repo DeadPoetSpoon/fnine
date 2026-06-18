@@ -150,6 +150,7 @@ fnine/
 | `POST` | `/settings/fonts`                     | Upload a font file         |
 | `POST` | `/settings/fonts/delete`              | Delete a font file         |
 | `POST` | `/api/progress`                       | Save reading progress      |
+| `GET`  | `/api/recent`                          | Last-read book (JSON)       |
 | `GET`  | `/api/book/{id}/annotations`          | List annotations           |
 | `POST` | `/api/book/{id}/annotations`          | Create annotation          |
 | `POST` | `/api/book/{id}/annotations/{aid}`    | Delete annotation          |

@@ -65,7 +65,7 @@ pub async fn upload_book(
         let mut data_store = state.books.load().await?;
         data_store.books.push(book);
         state.books.save(&data_store).await?;
-        state.books_cache.invalidate(&());
+        state.invalidate_books_cache();
 
         tracing::info!("Book uploaded: {id}");
 
@@ -94,7 +94,7 @@ pub async fn delete_book(
 
     data.books.retain(|b| b.id != id);
     state.books.save(&data).await?;
-    state.books_cache.invalidate(&());
+    state.invalidate_books_cache();
 
     let epub_path = state.books_dir().join(format!("{id}.epub"));
     let _ = fs::remove_file(&epub_path).await;

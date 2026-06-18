@@ -37,6 +37,7 @@ pub async fn save_progress(
     );
 
     state.progress.save(&data).await?;
+    state.invalidate_progress_cache();
 
     Ok(Json(ProgressOutput { ok: true }))
 }

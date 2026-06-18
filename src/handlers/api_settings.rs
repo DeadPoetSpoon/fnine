@@ -49,13 +49,7 @@ pub async fn settings_page(
     State(state): State<AppState>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
-    let settings = if let Some(cached) = state.settings_cache.get(&()) {
-        cached
-    } else {
-        let s = state.settings.load().await?;
-        state.settings_cache.insert((), s.clone());
-        s
-    };
+    let settings = state.load_settings().await?;
     let (t, theme) = load_translations(&query);
     let mut fonts = Vec::new();
     if let Ok(mut entries) = fs::read_dir(state.fonts_dir()).await {
@@ -92,7 +86,7 @@ pub async fn save_settings(
             font_family: form.font_family,
         })
         .await?;
-    state.settings_cache.invalidate(&());
+    state.invalidate_settings_cache();
 
     Ok(Redirect::to(&format!(
         "/settings?lang={lang}&theme={theme}"
