@@ -20,7 +20,7 @@
         <div class="book-actions">
             <a href="/book/{{ book.id }}/read?lang={{ t.lang() }}&theme={{ theme }}" class="btn btn-primary btn-lg">📖 {{ t.get("book.start_reading") }}</a>
             <form action="/book/{{ book.id }}/delete?lang={{ t.lang() }}&theme={{ theme }}" method="post" onsubmit="return confirm('{{ t.get("book.delete_confirm") }}')" style="display: inline">
-                <button type="submit" class="btn btn-danger">🗑 {{ t.get("book.delete") }}</button>
+                <button type="submit" class="btn btn-danger btn-lg">🗑 {{ t.get("book.delete") }}</button>
             </form>
         </div>
     </div>

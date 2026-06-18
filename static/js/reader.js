@@ -119,9 +119,6 @@
   function showAnnotPopup(rect) {
     document.getElementById("annot-btns").style.display = "";
     document.getElementById("annot-form").style.display = "none";
-    annotPopup.style.top = rect.top + window.scrollY - 40 + "px";
-    annotPopup.style.left =
-      rect.left + window.scrollX + rect.width / 2 - 40 + "px";
     annotPopup.classList.add("visible");
   }
 
