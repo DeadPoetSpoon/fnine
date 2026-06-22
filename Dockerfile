@@ -17,33 +17,27 @@
 #   docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/user/fnine --push .
 # =============================================================================
 
-# ---- Stage 1: Planner (cargo-chef) ----
+# ---- Stage 1: Planner (cargo-chef binary, no compilation) ----
 FROM library/rust:1.96-alpine3.23 AS chef
 
-# Map Docker's TARGETPLATFORM to the matching Rust target triple.
-# This ARG is injected automatically by Buildx; falls back to the build host arch.
-ARG TARGETPLATFORM
-RUN echo "[fnine] TARGETPLATFORM = ${TARGETPLATFORM}" && \
-    case "${TARGETPLATFORM}" in \
-      "linux/amd64")   RUST_TARGET="x86_64-unknown-linux-musl" ;; \
-      "linux/arm64")   RUST_TARGET="aarch64-unknown-linux-musl" ;; \
-      *)               echo "ERROR: Unsupported platform ${TARGETPLATFORM}" ; exit 1 ;; \
-    esac && \
-    echo "[fnine] Rust target  = ${RUST_TARGET}" && \
-    echo "${RUST_TARGET}" > /rust_target && \
-    rustup target add "${RUST_TARGET}"
+# Install build dependencies (100% cachable — identical for all platforms)
+RUN apk add --no-cache pkgconfig openssl-dev musl-dev wget
 
-# Use domestic Alpine mirror (USTC) — uncomment if building in China
-# RUN sed -i 's|dl-cdn.alpinelinux.org|mirrors.ustc.edu.cn|g' /etc/apk/repositories
+# Download pre-built cargo-chef binary instead of compiling from source.
+# Saves ~4 minutes on cold builds and makes this layer fully cachable.
+ARG CARGO_CHEF_VERSION=0.1.77
+RUN ARCH=$(apk --print-arch) && \
+    CHEF_ARCH=$(case "${ARCH}" in \
+      "x86_64")  echo "x86_64-unknown-linux-musl" ;; \
+      "aarch64") echo "aarch64-unknown-linux-musl" ;; \
+      *)         echo "unsupported:${ARCH}" ; exit 1 ;; \
+    esac) && \
+    wget -q "https://github.com/LukeMathWalker/cargo-chef/releases/download/v${CARGO_CHEF_VERSION}/cargo-chef-${CHEF_ARCH}.tar.gz" -O /tmp/chef.tar.gz && \
+    tar xzf /tmp/chef.tar.gz -C /usr/local/cargo/bin/ cargo-chef && \
+    rm /tmp/chef.tar.gz && \
+    chmod +x /usr/local/cargo/bin/cargo-chef && \
+    cargo chef --version
 
-RUN apk add --no-cache pkgconfig openssl-dev musl-dev
-
-# Use domestic cargo mirror (rsproxy) — uncomment if building in China
-# RUN mkdir -p $CARGO_HOME && \
-#     printf '[source.crates-io]\nreplace-with = "rsproxy"\n[source.rsproxy]\nregistry = "sparse+https://rsproxy.cn/index/"\n' \
-#     > $CARGO_HOME/config.toml
-
-RUN cargo install cargo-chef
 WORKDIR /app
 
 # ---- Stage 2: Prepare recipe ----
@@ -53,6 +47,19 @@ RUN cargo chef prepare --recipe-path recipe.json
 
 # ---- Stage 3: Build dependencies (cached by recipe.json) ----
 FROM chef AS builder
+
+# ARG declared only in this stage where it's needed, so it doesn't pollute
+# the chef stage cache or invalidate layers that don't depend on it.
+ARG TARGETPLATFORM
+RUN case "${TARGETPLATFORM}" in \
+      "linux/amd64")   RUST_TARGET="x86_64-unknown-linux-musl" ;; \
+      "linux/arm64")   RUST_TARGET="aarch64-unknown-linux-musl" ;; \
+      *)               echo "ERROR: Unsupported platform ${TARGETPLATFORM}" ; exit 1 ;; \
+    esac && \
+    echo "[fnine] Rust target = ${RUST_TARGET}" && \
+    rustup target add "${RUST_TARGET}" && \
+    echo "${RUST_TARGET}" > /rust_target
+
 COPY --from=planner /app/recipe.json recipe.json
 RUN RUST_TARGET=$(cat /rust_target) && \
     cargo chef cook --release --target "${RUST_TARGET}" --recipe-path recipe.json
@@ -68,7 +75,6 @@ FROM library/alpine:3.23 AS runtime
 RUN apk add --no-cache ca-certificates
 WORKDIR /app
 
-# Single common path — the builder stage already copies the correct binary to /app/fnine
 COPY --from=builder /app/fnine /usr/local/bin/fnine
 COPY --from=builder /app/static /app/static
 
