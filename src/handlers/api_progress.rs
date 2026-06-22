@@ -26,13 +26,34 @@ pub async fn save_progress(
 ) -> Result<Json<ProgressOutput>, AppError> {
     let mut data = state.progress.load().await?;
 
+    let now = Utc::now();
+    let existing = data.entries.get(&input.book_id);
+
+    // Determine if this position is farther than the stored "last"
+    let (last_ch, last_pos, last_ts) = {
+        let cur = (input.chapter, input.position);
+        let prev = existing.map(|e| (e.last_chapter, e.last_position));
+        if prev.is_none_or(|p| cur > p) {
+            (input.chapter, input.position, Some(now))
+        } else {
+            (
+                existing.unwrap().last_chapter,
+                existing.unwrap().last_position,
+                existing.unwrap().last_updated_at,
+            )
+        }
+    };
+
     data.entries.insert(
         input.book_id.clone(),
         ProgressEntry {
             book_id: input.book_id,
             chapter: input.chapter,
             position: input.position,
-            updated_at: Utc::now(),
+            updated_at: now,
+            last_chapter: last_ch,
+            last_position: last_pos,
+            last_updated_at: last_ts,
         },
     );
 

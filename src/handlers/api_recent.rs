@@ -20,6 +20,8 @@ pub struct RecentProgress {
     pub chapter: u32,
     pub position: f64, // 0.0 ~ 1.0
     pub updated_at: String,
+    pub last_chapter: u32,
+    pub last_position: f64,
 }
 
 /// GET /api/recent — return the last-read book as JSON
@@ -49,6 +51,8 @@ pub async fn recent_book(
                     chapter: entry.chapter,
                     position: entry.position,
                     updated_at: entry.updated_at.to_rfc3339(),
+                    last_chapter: entry.last_chapter,
+                    last_position: entry.last_position,
                 }),
                 reader_url: format!("/book/{}/read", book.id),
             }))

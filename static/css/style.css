@@ -142,6 +142,12 @@ body {
     font-size: 1rem;
 }
 
+.btn-sm {
+    padding: 0.3rem 0.7rem;
+    font-size: 0.8rem;
+    min-height: 30px;
+}
+
 /* === Book Grid === */
 .book-grid {
     display: grid;

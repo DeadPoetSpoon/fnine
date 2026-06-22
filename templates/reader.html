@@ -20,6 +20,9 @@
         <div class="reader-toolbar">
             <button class="btn-icon" data-action="open-toc" aria-label="{{ t.get("reader.open_toc") }}" id="toc-open-btn">☰</button>
             <span class="chapter-title">{{ chapter_label }}</span>
+            {% if last_chapter > 0 || last_position > 0.0 %}
+            <a href="/book/{{ book_id }}/read/{{ last_chapter }}?pos={{ last_position }}&lang={{ t.lang() }}&theme={{ theme }}" class="btn btn-secondary btn-sm" id="jump-last-btn">{{ t.get("reader.jump_last") }}</a>
+            {% endif %}
         </div>
         <article class="chapter-content" id="chapter-content">
             <pre class="plain-text" style="font-size: {{ font_size }}px;{% if !font_family.is_empty() %} font-family: {{ font_family }};{% endif %}">{{ chapter_content }}</pre>

@@ -24,6 +24,7 @@ toc = "Table of Contents"
 theme = "Theme"
 hide_toc = "Hide TOC"
 open_toc = "Open TOC"
+jump_last = "Jump to Last"
 
 [annotation]
 title = "Annotations & Notes"

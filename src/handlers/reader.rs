@@ -20,6 +20,8 @@ struct ReaderTemplate<'a> {
     toc: Vec<ChapterEntry>,
     chapter_count: usize,
     initial_position: f64,
+    last_chapter: usize,
+    last_position: f64,
     font_size: u32,
     font_family: String,
     font_face: String,
@@ -80,12 +82,24 @@ pub async fn read_chapter_handler(
     let label = toc[chapter].label.clone();
 
     let progress = state.load_progress().await?;
-    let initial_position = progress
+
+    // Use explicit pos parameter if provided (jump-to-last), else fall back to progress
+    let initial_position = if let Some(pos_str) = query.get("pos") {
+        pos_str.parse::<f64>().unwrap_or(0.0)
+    } else {
+        progress
+            .entries
+            .get(&id)
+            .filter(|e| e.chapter == chapter as u32)
+            .map(|e| e.position)
+            .unwrap_or(0.0)
+    };
+
+    let (last_chapter, last_position) = progress
         .entries
         .get(&id)
-        .filter(|e| e.chapter == chapter as u32)
-        .map(|e| e.position)
-        .unwrap_or(0.0);
+        .map(|e| (e.last_chapter as usize, e.last_position))
+        .unwrap_or((0, 0.0));
 
     let lang = query.get("lang").map(|s| s.as_str()).unwrap_or("zh");
     let theme = query
@@ -129,6 +143,8 @@ pub async fn read_chapter_handler(
         toc,
         chapter_count,
         initial_position,
+        last_chapter,
+        last_position,
         font_size: settings.font_size,
         font_family,
         font_face,
