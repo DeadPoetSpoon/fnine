@@ -12,6 +12,12 @@
 # Single-platform local build:
 #   docker build -t fnine .
 #
+# Build with Chinese mirrors (faster inside China):
+#   docker build \
+#     --build-arg APK_MIRROR=mirrors.aliyun.com \
+#     --build-arg CARGO_MIRROR=sparse+https://mirrors.ustc.edu.cn/crates.io-index/ \
+#     -t fnine .
+#
 # Multi-platform build + push (requires buildx):
 #   docker buildx create --use
 #   docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/user/fnine --push .
@@ -20,23 +26,31 @@
 # ---- Stage 1: Planner (cargo-chef binary, no compilation) ----
 FROM library/rust:1.96-alpine3.23 AS chef
 
-# Install build dependencies (100% cachable — identical for all platforms)
-RUN apk add --no-cache pkgconfig openssl-dev musl-dev wget
+# Optionally use a Chinese APK mirror for faster builds inside China.
+# Example: --build-arg APK_MIRROR=mirrors.aliyun.com
+ARG APK_MIRROR
+RUN if [ -n "${APK_MIRROR}" ]; then \
+        sed -i "s@dl-cdn.alpinelinux.org@${APK_MIRROR}@g" /etc/apk/repositories ; \
+    fi
 
-# Download pre-built cargo-chef binary instead of compiling from source.
-# Saves ~4 minutes on cold builds and makes this layer fully cachable.
-ARG CARGO_CHEF_VERSION=0.1.77
-RUN ARCH=$(apk --print-arch) && \
-    CHEF_ARCH=$(case "${ARCH}" in \
-      "x86_64")  echo "x86_64-unknown-linux-musl" ;; \
-      "aarch64") echo "aarch64-unknown-linux-musl" ;; \
-      *)         echo "unsupported:${ARCH}" ; exit 1 ;; \
-    esac) && \
-    wget -q "https://github.com/LukeMathWalker/cargo-chef/releases/download/v${CARGO_CHEF_VERSION}/cargo-chef-${CHEF_ARCH}.tar.gz" -O /tmp/chef.tar.gz && \
-    tar xzf /tmp/chef.tar.gz -C /usr/local/cargo/bin/ cargo-chef && \
-    rm /tmp/chef.tar.gz && \
-    chmod +x /usr/local/cargo/bin/cargo-chef && \
-    cargo chef --version
+# Optionally use a Chinese Cargo mirror for faster crate downloads inside China.
+# Pass the sparse registry URL, e.g.:
+#   --build-arg CARGO_MIRROR=sparse+https://mirrors.ustc.edu.cn/crates.io-index/
+ARG CARGO_MIRROR
+RUN if [ -n "${CARGO_MIRROR}" ]; then \
+        mkdir -p /usr/local/cargo && \
+        printf '[source.crates-io]\nreplace-with = "mirror"\n\n[source.mirror]\nregistry = "%s"\n' "${CARGO_MIRROR}" > /usr/local/cargo/config.toml ; \
+    fi
+
+# Clean stale APK cache, then install build deps (100% cachable layer).
+# 'apk update --no-cache' ensures a fresh index fetch, fixing the
+# "v2 database format error" when upstream indexes have changed.
+RUN rm -rf /var/cache/apk/* && \
+    apk update --no-cache && \
+    apk add --no-cache pkgconf openssl-dev musl-dev
+
+# Install cargo-chef (cached after first build).
+RUN cargo install cargo-chef --locked
 
 WORKDIR /app
 
@@ -72,7 +86,15 @@ RUN RUST_TARGET=$(cat /rust_target) && \
 
 # ---- Stage 5: Runtime (minimal Alpine) ----
 FROM library/alpine:3.23 AS runtime
-RUN apk add --no-cache ca-certificates
+
+# Optionally use a Chinese APK mirror for faster builds inside China.
+ARG APK_MIRROR
+RUN if [ -n "${APK_MIRROR}" ]; then \
+        sed -i "s@dl-cdn.alpinelinux.org@${APK_MIRROR}@g" /etc/apk/repositories ; \
+    fi
+
+RUN apk update --no-cache && \
+    apk add --no-cache ca-certificates
 WORKDIR /app
 
 COPY --from=builder /app/fnine /usr/local/bin/fnine
