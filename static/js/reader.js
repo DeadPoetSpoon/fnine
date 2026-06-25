@@ -30,12 +30,35 @@
   // ── Keyboard navigation ────────────────────────────
   document.addEventListener("keydown", function (e) {
     if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+
+    // Chapter navigation
     if (e.key === "ArrowRight") {
       var next = document.querySelector(".reader-nav a.btn-primary");
-      if (next) next.click();
+      if (next) {
+        next.click();
+        e.preventDefault();
+      }
     } else if (e.key === "ArrowLeft") {
       var prev = document.querySelector(".reader-nav a.btn-secondary");
-      if (prev) prev.click();
+      if (prev) {
+        prev.click();
+        e.preventDefault();
+      }
+    }
+
+    // Page-like scroll (80% viewport height, with 20% overlap for context)
+    // Ideal for e-ink devices — instant jump, no smooth scrolling.
+    var step = Math.round(window.innerHeight * 0.8) || 400;
+    if (
+      e.key === "ArrowDown" ||
+      e.key === "PageDown" ||
+      (e.key === " " && !e.shiftKey)
+    ) {
+      window.scrollBy({ top: step, left: 0, behavior: "instant" });
+      e.preventDefault();
+    } else if (e.key === "ArrowUp" || e.key === "PageUp") {
+      window.scrollBy({ top: -step, left: 0, behavior: "instant" });
+      e.preventDefault();
     }
   });
 
