@@ -188,6 +188,27 @@
 
   var selection = null;
   var selectRange = null;
+  var selCheckTimer = null;
+
+  function isInChapterContent(sel) {
+    if (!sel.rangeCount) return false;
+    var contentEl = document.getElementById("chapter-content");
+    if (!contentEl) return false;
+    return contentEl.contains(sel.getRangeAt(0).commonAncestorContainer);
+  }
+
+  function handleSelection() {
+    var sel = window.getSelection();
+    var text = sel ? sel.toString().trim() : "";
+    if (text.length < 2 || !isInChapterContent(sel)) {
+      annotPopup.classList.remove("visible");
+      return;
+    }
+    selection = sel;
+    selectRange = sel.getRangeAt(0).cloneRange();
+    var rect = selectRange.getBoundingClientRect();
+    showAnnotPopup(rect);
+  }
 
   function showAnnotPopup(rect) {
     document.getElementById("annot-btns").style.display = "";
@@ -205,22 +226,17 @@
     }, 50);
   }
 
+  // Desktop: mouseup fires after the user releases the mouse button
   document.addEventListener("mouseup", function (e) {
-    // Don't interfere with clicks on the annotation popup itself
     if (e.target.closest("#annot-popup")) return;
+    setTimeout(handleSelection, 10);
+  });
 
-    setTimeout(function () {
-      var sel = window.getSelection();
-      var text = sel ? sel.toString().trim() : "";
-      if (text.length < 2) {
-        annotPopup.classList.remove("visible");
-        return;
-      }
-      selection = sel;
-      selectRange = sel.getRangeAt(0).cloneRange();
-      var rect = selectRange.getBoundingClientRect();
-      showAnnotPopup(rect);
-    }, 10);
+  // Mobile: selectionchange fires as the user adjusts selection handles.
+  // Debounce it — only show the popup after a pause in adjustments.
+  document.addEventListener("selectionchange", function () {
+    clearTimeout(selCheckTimer);
+    selCheckTimer = setTimeout(handleSelection, 500);
   });
 
   annotPopup.addEventListener("click", function (e) {
