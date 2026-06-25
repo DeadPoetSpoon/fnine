@@ -59,25 +59,98 @@
   // ── Init ───────────────────────────────────────────
   applySidebar();
 
-  // ── Progress auto-save ─────────────────────────────
+  // ── Progress auto-save (character-offset based for cross-device consistency) ──
   var progressTimer = null;
   var pageMeta = document.getElementById("reader-app");
   var bookId = pageMeta ? pageMeta.dataset.bookId : null;
   var chapter = pageMeta ? parseInt(pageMeta.dataset.chapter) : 0;
   var initPos = pageMeta ? parseFloat(pageMeta.dataset.position) || 0 : 0;
+  var REFERENCE_Y = 0.3; // reference point 30% from top of viewport
 
-  // Restore scroll position
+  // Get character offset within contentEl at the reference viewport point
+  function getCharOffsetAtRef(contentEl) {
+    var rect = contentEl.getBoundingClientRect();
+    var x = rect.left + Math.max(10, rect.width * 0.1);
+    var y = window.innerHeight * REFERENCE_Y;
+    // Reference point above or below content → clamp to bounds
+    if (y < rect.top) return 0;
+    if (y > rect.bottom) return contentEl.textContent.length;
+
+    if (!document.caretRangeFromPoint) return null;
+    var range;
+    try {
+      range = document.caretRangeFromPoint(x, y);
+    } catch (e) {
+      return null;
+    }
+    if (!range || !contentEl.contains(range.startContainer)) return null;
+
+    var walker = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT);
+    var offset = 0;
+    while (walker.nextNode()) {
+      if (walker.currentNode === range.startContainer) {
+        return offset + range.startOffset;
+      }
+      offset += walker.currentNode.textContent.length;
+    }
+    return offset;
+  }
+
+  // Scroll so that charOffset within contentEl appears at the reference point
+  function scrollToCharOffset(contentEl, charOffset) {
+    var walker = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT);
+    var pos = 0;
+    while (walker.nextNode()) {
+      var len = walker.currentNode.textContent.length;
+      if (pos + len >= charOffset) {
+        var range = document.createRange();
+        range.setStart(walker.currentNode, Math.min(charOffset - pos, len));
+        range.collapse(true);
+        var rect = range.getClientRects()[0];
+        if (rect) {
+          window.scrollTo(
+            0,
+            window.scrollY + rect.top - window.innerHeight * REFERENCE_Y,
+          );
+        }
+        return;
+      }
+      pos += len;
+    }
+  }
+
+  // Restore scroll position (character-offset based)
   if (initPos > 0) {
-    var docHeight = document.documentElement.scrollHeight - window.innerHeight;
-    window.scrollTo(0, Math.round(initPos * docHeight));
+    var contentEl = document.getElementById("chapter-content");
+    if (contentEl) {
+      var totalChars = contentEl.textContent.length;
+      if (totalChars > 0) {
+        scrollToCharOffset(contentEl, Math.round(initPos * totalChars));
+      }
+    }
   }
 
   function saveProgress() {
     if (!bookId) return;
-    var scrollPos = window.scrollY;
-    var docHeight = document.documentElement.scrollHeight - window.innerHeight;
-    var position =
-      docHeight > 0 ? Math.min(1, Math.max(0, scrollPos / docHeight)) : 0;
+    var contentEl = document.getElementById("chapter-content");
+    if (!contentEl) return;
+
+    var totalChars = contentEl.textContent.length;
+    if (totalChars === 0) return;
+
+    // Primary: character-offset based (consistent across devices)
+    var charOffset = getCharOffsetAtRef(contentEl);
+    var position;
+    if (charOffset !== null) {
+      position = Math.min(1, Math.max(0, charOffset / totalChars));
+    } else {
+      // Fallback: scroll percentage (when caretRangeFromPoint unavailable)
+      var scrollPos = window.scrollY;
+      var docHeight =
+        document.documentElement.scrollHeight - window.innerHeight;
+      position =
+        docHeight > 0 ? Math.min(1, Math.max(0, scrollPos / docHeight)) : 0;
+    }
 
     fetch("/api/progress", {
       method: "POST",
