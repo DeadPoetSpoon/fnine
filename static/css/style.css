@@ -803,6 +803,14 @@ html:-webkit-full-screen .fullscreen-exit-fab {
 .annotation-body {
     flex: 1;
     min-width: 0;
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+}
+
+.annotation-body:hover .annotation-quote {
+    border-left-color: var(--color-primary);
 }
 
 .annotation-quote {

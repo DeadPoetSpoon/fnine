@@ -32,11 +32,11 @@
     <div class="annotations-list">
         {% for a in annotations %}
         <div class="annotation-item">
-            <div class="annotation-body">
+            <a class="annotation-body" href="/book/{{ book.id }}/read/{{ a.chapter }}?pos={{ a.position_start|fmt("{:.3}") }}&lang={{ t.lang() }}&theme={{ theme }}" title="{{ t.get("annotation.jump_to") }}">
                 <blockquote class="annotation-quote">{{ a.selected_text }}</blockquote>
                 {% if a.note.is_some() %}<p class="annotation-note">💬 {{ a.note.as_ref().unwrap() }}</p>{% endif %}
                 <span class="annotation-meta">第 {{ a.chapter + 1 }} 章 · {{ a.created_at }}</span>
-            </div>
+            </a>
             <form action="/api/book/{{ book.id }}/annotations/{{ a.id }}?lang={{ t.lang() }}&theme={{ theme }}" method="post" class="annotation-delete-form">
                 <button type="submit" class="btn-icon" title="{{ t.get("book.delete") }}">✕</button>
             </form>
