@@ -583,6 +583,72 @@ body {
     white-space: nowrap;
 }
 
+/* === Fullscreen reader mode === */
+.fullscreen-exit-fab {
+    display: none;
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 200;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 1px solid var(--color-border);
+    background: var(--reader-toolbar-bg);
+    color: var(--color-text);
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow);
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.fullscreen-exit-fab:hover {
+    opacity: 1;
+}
+
+/* Hide app chrome while in web fullscreen
+   (the browser's own address/status bars are hidden by the browser itself) */
+html:fullscreen .navbar,
+html:fullscreen .toc-sidebar,
+html:fullscreen .reader-toolbar,
+html:fullscreen .reader-nav {
+    display: none;
+}
+
+html:fullscreen .container {
+    padding: 0;
+}
+
+html:fullscreen .reader-layout {
+    margin: 0;
+}
+
+html:fullscreen .fullscreen-exit-fab {
+    display: inline-flex;
+}
+
+/* Safari < 16.4 */
+html:-webkit-full-screen .navbar,
+html:-webkit-full-screen .toc-sidebar,
+html:-webkit-full-screen .reader-toolbar,
+html:-webkit-full-screen .reader-nav {
+    display: none;
+}
+
+html:-webkit-full-screen .container {
+    padding: 0;
+}
+
+html:-webkit-full-screen .reader-layout {
+    margin: 0;
+}
+
+html:-webkit-full-screen .fullscreen-exit-fab {
+    display: inline-flex;
+}
+
 /* === Footnotes === */
 .fn-ref {
     color: var(--color-primary);

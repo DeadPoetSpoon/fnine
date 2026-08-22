@@ -77,7 +77,43 @@
     if (btn.getAttribute("data-action") === "open-toc") {
       openToc();
     }
+
+    if (btn.getAttribute("data-action") === "toggle-fullscreen") {
+      toggleFullscreen();
+    }
   });
+
+  // ── Fullscreen ─────────────────────────────────────
+  function isFullscreen() {
+    return !!(
+      document.fullscreenElement ||
+      document.webkitFullscreenElement ||
+      document.mozFullScreenElement ||
+      document.msFullscreenElement
+    );
+  }
+
+  function requestFullscreen() {
+    var el = document.documentElement;
+    if (el.requestFullscreen) return el.requestFullscreen();
+    if (el.webkitRequestFullscreen) return el.webkitRequestFullscreen();
+    if (el.mozRequestFullScreen) return el.mozRequestFullScreen();
+    if (el.msRequestFullscreen) return el.msRequestFullscreen();
+    return null;
+  }
+
+  function exitFullscreen() {
+    if (document.exitFullscreen) return document.exitFullscreen();
+    if (document.webkitExitFullscreen) return document.webkitExitFullscreen();
+    if (document.mozCancelFullScreen) return document.mozCancelFullScreen();
+    if (document.msExitFullscreen) return document.msExitFullscreen();
+    return null;
+  }
+
+  function toggleFullscreen() {
+    var p = isFullscreen() ? exitFullscreen() : requestFullscreen();
+    if (p && p.catch) p.catch(function () {});
+  }
 
   // ── Init ───────────────────────────────────────────
   applySidebar();

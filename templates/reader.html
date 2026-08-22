@@ -23,6 +23,9 @@
             {% if last_chapter > 0 || last_position > 0.0 %}
             <a href="/book/{{ book_id }}/read/{{ last_chapter }}?pos={{ last_position }}&lang={{ t.lang() }}&theme={{ theme }}" class="btn btn-secondary btn-sm" id="jump-last-btn">{{ t.get("reader.jump_last") }}</a>
             {% endif %}
+            <button class="btn-icon" data-action="toggle-fullscreen" id="fullscreen-btn" aria-label="{{ t.get("reader.fullscreen") }}" title="{{ t.get("reader.fullscreen") }}">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+            </button>
         </div>
         <article class="chapter-content" id="chapter-content">
             <pre class="plain-text" style="font-size: {{ font_size }}px;{% if !font_family.is_empty() %} font-family: {{ font_family }};{% endif %}">{{ chapter_content }}</pre>
@@ -42,5 +45,8 @@
         </nav>
     </div>
 </div>
+<button class="fullscreen-exit-fab" id="fullscreen-exit-fab" data-action="toggle-fullscreen" aria-label="{{ t.get("reader.exit_fullscreen") }}" title="{{ t.get("reader.exit_fullscreen") }}">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/></svg>
+</button>
 <script src="/static/js/reader.js"></script>
 {% endblock %}

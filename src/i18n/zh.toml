@@ -25,6 +25,8 @@ theme = "主题"
 hide_toc = "隐藏目录"
 open_toc = "打开目录"
 jump_last = "到最后"
+fullscreen = "全屏"
+exit_fullscreen = "退出全屏"
 
 [annotation]
 title = "标注与想法"
