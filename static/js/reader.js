@@ -248,6 +248,7 @@
   var selection = null;
   var selectRange = null;
   var selCheckTimer = null;
+  var annotFormOpen = false; // note form visible — selection changes must not close the popup
 
   function isInChapterContent(sel) {
     if (!sel.rangeCount) return false;
@@ -257,6 +258,9 @@
   }
 
   function handleSelection() {
+    // On mobile, tapping a popup button clears the text selection, which fires
+    // selectionchange. If the note form is open, ignore it so the popup stays.
+    if (annotFormOpen) return;
     var sel = window.getSelection();
     var text = sel ? sel.toString().trim() : "";
     if (text.length < 2 || !isInChapterContent(sel)) {
@@ -270,12 +274,15 @@
   }
 
   function showAnnotPopup(rect) {
+    annotFormOpen = false;
     document.getElementById("annot-btns").style.display = "";
     document.getElementById("annot-form").style.display = "none";
     annotPopup.classList.add("visible");
   }
 
   function showAnnotForm() {
+    annotFormOpen = true;
+    clearTimeout(selCheckTimer);
     document.getElementById("annot-btns").style.display = "none";
     document.getElementById("annot-form").style.display = "";
     annotPopup.classList.add("visible");
@@ -354,12 +361,14 @@
       annotPopup.classList.remove("visible");
       selection = null;
       selectRange = null;
+      annotFormOpen = false;
       return;
     }
 
     annotPopup.classList.remove("visible");
     selection = null;
     selectRange = null;
+    annotFormOpen = false;
   });
 
   function highlightRange(range, color) {
