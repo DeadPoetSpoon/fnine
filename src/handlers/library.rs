@@ -27,11 +27,38 @@ struct UploadTemplate<'a> {
     theme: &'a str,
 }
 
+/// Annotation with display-ready fields (timestamp pre-formatted to seconds).
+struct AnnotationDisplay {
+    id: String,
+    chapter: u32,
+    selected_text: String,
+    note: Option<String>,
+    position_start: f64,
+    created_at: String,
+}
+
+impl From<Annotation> for AnnotationDisplay {
+    fn from(a: Annotation) -> Self {
+        Self {
+            id: a.id,
+            chapter: a.chapter,
+            selected_text: a.selected_text,
+            note: a.note,
+            position_start: a.position_start,
+            created_at: a
+                .created_at
+                .with_timezone(&chrono::Local)
+                .format("%Y-%m-%d %H:%M:%S")
+                .to_string(),
+        }
+    }
+}
+
 #[derive(Template)]
 #[template(path = "book_detail.html")]
 struct BookDetailTemplate<'a> {
     book: &'a Book,
-    annotations: Vec<Annotation>,
+    annotations: Vec<AnnotationDisplay>,
     file_size_display: String,
     t: &'a Translations,
     theme: &'a str,
@@ -109,7 +136,11 @@ pub async fn book_detail(
 
     let tmpl = BookDetailTemplate {
         book,
-        annotations: annot_data.annotations,
+        annotations: annot_data
+            .annotations
+            .into_iter()
+            .map(AnnotationDisplay::from)
+            .collect(),
         file_size_display,
         t: &t,
         theme: &theme,
