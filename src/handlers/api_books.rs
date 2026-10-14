@@ -1,9 +1,12 @@
 use askama::Template;
-use axum::extract::{Multipart, Path, Query, State};
+use axum::body::Body;
+use axum::extract::{Multipart, Path, Query, Request, State};
+use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Redirect, Response};
 use chrono::Utc;
 use std::collections::HashMap;
 use tokio::fs;
+use tower_http::services::ServeFile;
 use uuid::Uuid;
 
 use crate::db::books::Book;
@@ -73,6 +76,62 @@ pub async fn upload_book(
     }
 
     Err(AppError::Internal("No file found in upload".into()))
+}
+
+/// GET /book/:id/download — stream the original EPUB as an attachment.
+pub async fn download_book(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    request: Request,
+) -> Result<Response, AppError> {
+    let books = state.load_books().await?;
+    let book = books
+        .iter()
+        .find(|b| b.id == id)
+        .ok_or_else(|| AppError::NotFound("Book not found".into()))?;
+
+    // Only use the stored UUID for the path; the upload filename is for display.
+    let epub_path = state.books_dir().join(format!("{}.epub", book.id));
+    let mut response = ServeFile::new(epub_path)
+        .try_call(request)
+        .await?
+        .map(Body::new);
+    if response.status() == StatusCode::NOT_FOUND {
+        return Err(AppError::NotFound("Book file not found".into()));
+    }
+
+    if response.status().is_success() {
+        // RFC 8187 encoding preserves Chinese filenames and escapes header delimiters.
+        let filename = book
+            .file_name
+            .rsplit(['/', '\\'])
+            .next()
+            .filter(|name| !name.is_empty())
+            .unwrap_or("book.epub");
+        let encoded: String = filename
+            .bytes()
+            .map(|byte| {
+                if byte.is_ascii_alphanumeric() || b"-._".contains(&byte) {
+                    (byte as char).to_string()
+                } else {
+                    format!("%{byte:02X}")
+                }
+            })
+            .collect();
+        let disposition = HeaderValue::from_str(&format!(
+            "attachment; filename=\"book.epub\"; filename*=UTF-8''{encoded}"
+        ))
+        .map_err(|e| AppError::Internal(format!("Invalid download filename: {e}")))?;
+        response
+            .headers_mut()
+            .insert(header::CONTENT_DISPOSITION, disposition);
+        response.headers_mut().insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/epub+zip"),
+        );
+    }
+
+    Ok(response)
 }
 
 /// POST /book/:id/delete

@@ -140,6 +140,7 @@ fnine/
 | `GET`  | `/upload`                             | 上传表单             |
 | `POST` | `/upload`                             | 上传 EPUB 文件        |
 | `GET`  | `/book/{id}`                          | 书籍详情页           |
+| `GET`  | `/book/{id}/download`                 | 下载原始 EPUB 文件    |
 | `POST` | `/book/{id}/delete`                   | 删除书籍             |
 | `GET`  | `/book/{id}/read`                     | 跳转到上次阅读章节    |
 | `GET`  | `/book/{id}/read/{chapter}`           | 阅读指定章节         |

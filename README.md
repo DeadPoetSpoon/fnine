@@ -140,6 +140,7 @@ fnine/
 | `GET`  | `/upload`                             | Upload form                |
 | `POST` | `/upload`                             | Upload an EPUB file        |
 | `GET`  | `/book/{id}`                          | Book detail page           |
+| `GET`  | `/book/{id}/download`                 | Download the original EPUB |
 | `POST` | `/book/{id}/delete`                   | Delete a book              |
 | `GET`  | `/book/{id}/read`                     | Redirect to last chapter   |
 | `GET`  | `/book/{id}/read/{chapter}`           | Read a specific chapter    |

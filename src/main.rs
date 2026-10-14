@@ -37,6 +37,10 @@ async fn main() {
         .route("/", get(handlers::library::home))
         .route("/upload", get(handlers::library::upload_form))
         .route("/book/{id}", get(handlers::library::book_detail))
+        .route(
+            "/book/{id}/download",
+            get(handlers::api_books::download_book),
+        )
         // ── Search ──────────────────────────────────────
         .route("/search", get(handlers::search::search))
         // ── Settings ────────────────────────────────────
