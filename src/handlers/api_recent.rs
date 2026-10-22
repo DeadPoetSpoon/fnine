@@ -33,8 +33,11 @@ pub async fn recent_book(
     let books = state.load_books().await?;
 
     // Find the most recently updated progress entry
-    let latest: Option<&ProgressEntry> =
-        progress_data.entries.values().max_by_key(|e| e.updated_at);
+    let latest: Option<&ProgressEntry> = progress_data
+        .entries
+        .values()
+        .filter(|entry| books.iter().any(|book| book.id == entry.book_id))
+        .max_by_key(|e| e.updated_at);
 
     match latest {
         Some(entry) => {

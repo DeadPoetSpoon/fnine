@@ -1,6 +1,31 @@
-{% extends "base.html" %} {% block content %} {% if books.len() == 0 %}
+{% extends "base.html" %} {% block content %}
+{% if let Some(book) = recent %}<a class="continue-reading" href="/book/{{ book.id }}/read?lang={{ t.lang() }}&theme={{ theme }}">{{ t.get("library.continue") }}: {{ book.title }}</a>{% endif %}
+<form method="get" action="/" class="library-controls">
+    <input type="hidden" name="lang" value="{{ t.lang() }}">
+    <input type="hidden" name="theme" value="{{ theme }}">
+    <div class="library-filter">
+        <label for="library-sort">{{ t.get("library.sort") }}</label>
+        <select id="library-sort" name="sort">
+            <option value="uploaded" {% if sort == "uploaded" %}selected{% endif %}>{{ t.get("library.uploaded") }}</option>
+            <option value="last_read" {% if sort == "last_read" %}selected{% endif %}>{{ t.get("library.last_read") }}</option>
+            <option value="title" {% if sort == "title" %}selected{% endif %}>{{ t.get("library.title") }}</option>
+            <option value="author" {% if sort == "author" %}selected{% endif %}>{{ t.get("library.author") }}</option>
+        </select>
+    </div>
+    <div class="library-filter">
+        <label for="library-status">{{ t.get("library.status") }}</label>
+        <select id="library-status" name="status">
+            <option value="all" {% if status == "all" %}selected{% endif %}>{{ t.get("library.all") }}</option>
+            <option value="unread" {% if status == "unread" %}selected{% endif %}>{{ t.get("library.unread") }}</option>
+            <option value="reading" {% if status == "reading" %}selected{% endif %}>{{ t.get("library.reading") }}</option>
+            <option value="finished" {% if status == "finished" %}selected{% endif %}>{{ t.get("library.finished") }}</option>
+        </select>
+    </div>
+    <button class="btn btn-primary">{{ t.get("library.apply") }}</button>
+</form>
+{% if books.len() == 0 %}
 <div class="empty-state">
-    <p>📖 {{ t.get("book.no_books") }}</p>
+    <p>📖 {{ t.get("library.no_results") }}</p>
     <a
         href="/upload?lang={{ t.lang() }}&theme={{ theme }}"
         class="btn btn-primary"

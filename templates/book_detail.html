@@ -18,6 +18,7 @@
             <div class="meta-item"><span class="meta-label">{{ t.get("book.uploaded") }}</span><span class="meta-value">{{ book.uploaded_at }}</span></div>
         </div>
         <div class="book-actions">
+            <a href="/book/{{ book.id }}/annotations/export" class="btn btn-secondary">{{ t.get("annotation.export") }}</a>
             <a href="/book/{{ book.id }}/read?lang={{ t.lang() }}&theme={{ theme }}" class="btn btn-primary btn-lg">📖 {{ t.get("book.start_reading") }}</a>
             <a href="/book/{{ book.id }}/download" class="btn btn-secondary btn-lg" download>⬇ {{ t.get("book.download") }}</a>
             <form action="/book/{{ book.id }}/delete?lang={{ t.lang() }}&theme={{ theme }}" method="post" onsubmit="return confirm('{{ t.get("book.delete_confirm") }}')" style="display: inline">
@@ -33,11 +34,13 @@
     <div class="annotations-list">
         {% for a in annotations %}
         <div class="annotation-item">
-            <a class="annotation-body" href="/book/{{ book.id }}/read/{{ a.chapter }}?pos={{ a.position_start|fmt("{:.3}") }}&lang={{ t.lang() }}&theme={{ theme }}" title="{{ t.get("annotation.jump_to") }}">
+            <a class="annotation-body" href="/book/{{ book.id }}/read/{{ a.chapter }}?{% if !a.needs_review %}pos={{ a.position_start }}&{% endif %}lang={{ t.lang() }}&theme={{ theme }}" title="{{ t.get("annotation.jump_to") }}">
                 <blockquote class="annotation-quote">{{ a.selected_text }}</blockquote>
                 {% if a.note.is_some() %}<p class="annotation-note">💬 {{ a.note.as_ref().unwrap() }}</p>{% endif %}
-                <span class="annotation-meta">第 {{ a.chapter + 1 }} 章 · {{ a.created_at }}</span>
+                <span class="annotation-meta">{{ t.get("annotation.chapter") }} {{ a.chapter + 1 }} · {{ a.created_at }}</span>
+                {% if a.needs_review %}<p>{{ t.get("annotation.review") }}</p>{% endif %}
             </a>
+            <details><summary>{{ t.get("annotation.edit") }}</summary><form class="annotation-edit" data-url="/api/book/{{ book.id }}/annotations/{{ a.id }}"><label>{{ t.get("annotation.placeholder") }}<textarea name="note" maxlength="16384">{% if let Some(note) = a.note %}{{ note }}{% endif %}</textarea></label><label>{{ t.get("annotation.color") }}<select name="color"><option value="#ffee77" {% if a.color == "#ffee77" %}selected{% endif %}>{{ t.get("annotation.yellow") }}</option><option value="#a8e6a3" {% if a.color == "#a8e6a3" %}selected{% endif %}>{{ t.get("annotation.green") }}</option><option value="#a6d8ff" {% if a.color == "#a6d8ff" %}selected{% endif %}>{{ t.get("annotation.blue") }}</option><option value="#ffb3c6" {% if a.color == "#ffb3c6" %}selected{% endif %}>{{ t.get("annotation.pink") }}</option></select></label><button class="btn btn-secondary">{{ t.get("settings.save") }}</button><span role="status" data-error="{{ t.get("reader.save_failed") }}"></span></form></details>
             <form action="/api/book/{{ book.id }}/annotations/{{ a.id }}?lang={{ t.lang() }}&theme={{ theme }}" method="post" class="annotation-delete-form">
                 <button type="submit" class="btn-icon" title="{{ t.get("book.delete") }}">✕</button>
             </form>
@@ -46,4 +49,5 @@
     </div>
 </section>
 {% endif %}
+<script src="/static/js/annotations.js"></script>
 {% endblock %}

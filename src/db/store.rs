@@ -3,6 +3,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use tokio::fs;
+use tokio::io::AsyncWriteExt;
 
 /// Generic TOML-backed persistent store.
 ///
@@ -29,6 +30,12 @@ where
     /// Load data from the TOML file.
     /// Returns `T::default()` if the file does not exist.
     pub async fn load(&self) -> Result<T, AppError> {
+        if fs::symlink_metadata(&self.path)
+            .await
+            .is_ok_and(|metadata| metadata.file_type().is_symlink())
+        {
+            return Err(AppError::Internal("Store path cannot be a symlink".into()));
+        }
         match fs::read_to_string(&self.path).await {
             Ok(content) => {
                 let data: T = toml::from_str(&content)?;
@@ -52,9 +59,29 @@ where
         }
 
         // Write to temp file, then rename atomically
-        let tmp_path = self.path.with_extension("toml.tmp");
-        fs::write(&tmp_path, serialized).await?;
-        fs::rename(&tmp_path, &self.path).await?;
+        let tmp_path = self
+            .path
+            .with_extension(format!("{}.tmp", uuid::Uuid::new_v4()));
+        let result = async {
+            let mut file = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&tmp_path)
+                .await?;
+            file.write_all(serialized.as_bytes()).await?;
+            file.sync_all().await?;
+            drop(file);
+            fs::rename(&tmp_path, &self.path).await?;
+            if let Some(parent) = self.path.parent() {
+                fs::File::open(parent).await?.sync_all().await?;
+            }
+            Ok::<_, std::io::Error>(())
+        }
+        .await;
+        if result.is_err() {
+            let _ = fs::remove_file(&tmp_path).await;
+        }
+        result?;
 
         Ok(())
     }

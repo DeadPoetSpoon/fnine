@@ -81,7 +81,7 @@ RUN RUST_TARGET=$(cat /rust_target) && \
 # ---- Stage 4: Build application ----
 COPY . .
 RUN RUST_TARGET=$(cat /rust_target) && \
-    cargo build --release --target "${RUST_TARGET}" && \
+    cargo build --locked --release --target "${RUST_TARGET}" && \
     cp "/app/target/${RUST_TARGET}/release/fnine" /app/fnine
 
 # ---- Stage 5: Runtime (minimal Alpine) ----
@@ -94,7 +94,10 @@ RUN if [ -n "${APK_MIRROR}" ]; then \
     fi
 
 RUN apk update --no-cache && \
-    apk add --no-cache ca-certificates
+    apk add --no-cache ca-certificates && \
+    addgroup -g 10001 fnine && \
+    adduser -D -u 10001 -G fnine fnine && \
+    mkdir -p /app/data && chown fnine:fnine /app/data
 WORKDIR /app
 
 COPY --from=builder /app/fnine /usr/local/bin/fnine
@@ -107,5 +110,6 @@ EXPOSE 3000
 ENV FNINE_HOST=0.0.0.0
 ENV FNINE_PORT=3000
 ENV FNINE_DATA_DIR=/app/data
+USER root
 
 CMD ["/usr/local/bin/fnine"]

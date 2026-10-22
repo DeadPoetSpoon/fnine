@@ -20,6 +20,44 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: dtolnay/rust-toolchain@1.96.0
+        with:
+          components: rustfmt, clippy
+
+      - name: Verify tagged revision
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo test --locked --release
+
+      - name: Build and smoke test root and optional non-root runtimes
+        run: |
+          docker build -t fnine-smoke .
+          test "$(docker run --rm --entrypoint id fnine-smoke -u)" = 0
+          test "$(docker run --rm --user fnine:fnine --entrypoint id fnine-smoke -u)" = 10001
+          trap 'docker logs fnine-smoke-root; docker logs fnine-smoke-fnine; docker rm -fv fnine-smoke-root fnine-smoke-fnine' EXIT
+          docker run -d --name fnine-smoke-root -p 127.0.0.1:3000:3000 fnine-smoke
+          docker run -d --name fnine-smoke-fnine --user fnine:fnine -p 127.0.0.1:3001:3000 fnine-smoke
+          for port in 3000 3001; do
+            ready=0
+            for attempt in $(seq 1 30); do
+              if curl --fail "http://127.0.0.1:${port}/"; then ready=1; break; fi
+              sleep 1
+            done
+            test "$ready" -eq 1
+          done
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Browser release gate
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npm run test:browser
+
       - name: Set up QEMU (for ARM64 / Raspberry Pi emulation)
         uses: docker/setup-qemu-action@v3
         with:

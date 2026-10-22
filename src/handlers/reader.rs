@@ -3,7 +3,7 @@ use axum::extract::{Path, Query, State};
 use axum::response::{IntoResponse, Redirect, Response};
 use std::collections::HashMap;
 
-use crate::epub::parser::{ChapterEntry, extract_toc, read_chapter};
+use crate::epub::parser::{ChapterContent, ChapterEntry, extract_toc};
 use crate::error::AppError;
 use crate::i18n::translations::Translations;
 use crate::state::AppState;
@@ -16,15 +16,14 @@ struct ReaderTemplate<'a> {
     book_id: String,
     chapter_index: usize,
     chapter_label: String,
-    chapter_content: String,
+    chapter_content: std::sync::Arc<ChapterContent>,
     toc: Vec<ChapterEntry>,
     chapter_count: usize,
     initial_position: f64,
     last_chapter: usize,
     last_position: f64,
     font_size: u32,
-    font_family: String,
-    font_face: String,
+    custom_font: String,
     t: &'a Translations,
     theme: &'a str,
 }
@@ -37,6 +36,8 @@ pub async fn read_book(
     Path(id): Path<String>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Redirect, AppError> {
+    let book = state.book(&id).await?;
+    crate::epub::migration::upgrade(&state, &book).await?;
     let lang = query.get("lang").map(|s| s.as_str()).unwrap_or("zh");
     let theme = query.get("theme").map(|s| s.as_str()).unwrap_or("light");
     let progress = state.load_progress().await?;
@@ -56,36 +57,54 @@ pub async fn read_chapter_handler(
     Path((id, chapter)): Path<(String, usize)>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
-    let books = state.load_books().await?;
-    let book = books
-        .iter()
-        .find(|b| b.id == id)
-        .ok_or_else(|| AppError::NotFound("Book not found".into()))?;
+    let book = state.book(&id).await?;
+    crate::epub::migration::upgrade(&state, &book).await?;
 
     let epub_path = state.books_dir().join(format!("{}.epub", book.id));
 
-    let toc = extract_toc(&epub_path)?;
+    let toc = if let Some(toc) = state.toc_cache.get(&id) {
+        toc
+    } else {
+        let path = epub_path.clone();
+        let permit = state
+            .parsers
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|error| AppError::Internal(error.to_string()))?;
+        let toc = tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            extract_toc(&path)
+        })
+        .await
+        .map_err(|error| AppError::Internal(error.to_string()))??;
+        let weight = toc
+            .iter()
+            .map(|entry| entry.label.len() + std::mem::size_of::<ChapterEntry>())
+            .sum();
+        state
+            .toc_cache
+            .insert_weighted(id.clone(), toc.clone(), weight);
+        toc
+    };
     let chapter_count = toc.len();
 
     if chapter >= chapter_count {
         return Err(AppError::NotFound("Chapter not found".into()));
     }
 
-    let cache_key = format!("{}:ch:{}", book.id, chapter);
-    let content = if let Some(cached) = state.chapter_cache.get(&cache_key) {
-        cached
-    } else {
-        let text = read_chapter(&epub_path, chapter)?;
-        state.chapter_cache.insert(cache_key, text.clone());
-        text
-    };
+    let content = state.chapter(&id, chapter).await?;
     let label = toc[chapter].label.clone();
 
     let progress = state.load_progress().await?;
 
     // Use explicit pos parameter if provided (jump-to-last), else fall back to progress
     let initial_position = if let Some(pos_str) = query.get("pos") {
-        pos_str.parse::<f64>().unwrap_or(0.0)
+        let position = pos_str
+            .parse::<f64>()
+            .map_err(|_| AppError::BadRequest("Invalid position".into()))?;
+        crate::validation::position(position)?;
+        position
     } else {
         progress
             .entries
@@ -110,30 +129,15 @@ pub async fn read_chapter_handler(
     let t = Translations::load(lang);
 
     let settings = state.load_settings().await?;
-    let font_family =
-        if settings.font_family.ends_with(".ttf") || settings.font_family.ends_with(".woff2") {
-            settings
-                .font_family
-                .trim_end_matches(".ttf")
-                .trim_end_matches(".woff2")
-                .to_string()
-        } else {
-            settings.font_family.clone()
-        };
-    let font_face =
-        if settings.font_family.ends_with(".ttf") || settings.font_family.ends_with(".woff2") {
-            let fmt = if settings.font_family.ends_with(".woff2") {
-                "woff2"
-            } else {
-                "truetype"
-            };
-            format!(
-                "@font-face {{ font-family: '{}'; src: url('/fonts/{}') format('{}'); }}",
-                font_family, settings.font_family, fmt
-            )
-        } else {
-            String::new()
-        };
+    let custom_font = if settings.font_family.is_empty()
+        || super::api_settings::known_font(&state, &settings.font_family)
+            .await
+            .is_err()
+    {
+        String::new()
+    } else {
+        settings.font_family
+    };
 
     let tmpl = ReaderTemplate {
         book_id: book.id.clone(),
@@ -145,9 +149,8 @@ pub async fn read_chapter_handler(
         initial_position,
         last_chapter,
         last_position,
-        font_size: settings.font_size,
-        font_family,
-        font_face,
+        font_size: settings.font_size.clamp(12, 32),
+        custom_font,
         t: &t,
         theme,
     };

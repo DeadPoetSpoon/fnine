@@ -1,4 +1,3 @@
-use askama::Template;
 use axum::body::Body;
 use axum::extract::{Multipart, Path, Query, Request, State};
 use axum::http::{HeaderValue, StatusCode, header};
@@ -14,12 +13,6 @@ use crate::epub::parser::extract_metadata;
 use crate::error::AppError;
 use crate::state::AppState;
 
-#[derive(Template)]
-#[template(path = "components/book_card.html")]
-struct BookCardTemplate<'a> {
-    book: &'a Book,
-}
-
 /// POST /upload
 pub async fn upload_book(
     State(state): State<AppState>,
@@ -29,26 +22,39 @@ pub async fn upload_book(
     let lang = query.get("lang").map(|s| s.as_str()).unwrap_or("zh");
     let theme = query.get("theme").map(|s| s.as_str()).unwrap_or("light");
 
-    if let Ok(Some(field)) = multipart.next_field().await {
-        let file_name = field.file_name().unwrap_or("unknown.epub").to_string();
-        let data = field
-            .bytes()
+    let (staged, file_name, file_size) =
+        super::uploads::stage(&state, &mut multipart, 50 * 1024 * 1024).await?;
+    let id = Uuid::new_v4().to_string();
+    let epub_path = state.books_dir().join(format!("{id}.epub"));
+    let result = async {
+        let permit = state
+            .parsers
+            .clone()
+            .acquire_owned()
             .await
-            .map_err(|e| AppError::Internal(format!("Read error: {e}")))?;
-        if data.is_empty() {
-            return Err(AppError::Internal("Empty file".into()));
-        }
-        let file_size = data.len() as u64;
-        let id = Uuid::new_v4().to_string();
+            .map_err(|error| AppError::Internal(error.to_string()))?;
+        let path = staged.clone();
+        let meta = tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            extract_metadata(&path)
+        })
+        .await
+        .map_err(|error| AppError::Internal(error.to_string()))??;
 
-        let epub_path = state.books_dir().join(format!("{id}.epub"));
-        fs::write(&epub_path, &data).await?;
-
-        let meta = extract_metadata(&epub_path)?;
-
+        let import_marker = crate::db::store::Store::<crate::db::books::BooksData>::new(
+            state
+                .config
+                .data_dir
+                .join("imports")
+                .join(format!("{id}.toml")),
+        );
+        import_marker
+            .save(&crate::db::books::BooksData::default())
+            .await?;
         let cover_ext = if let (Some(cover_bytes), Some(ext)) = (meta.cover_bytes, meta.cover_ext) {
             let cover_path = state.covers_dir().join(format!("{id}.{ext}"));
             fs::write(&cover_path, &cover_bytes).await?;
+            fs::File::open(&cover_path).await?.sync_all().await?;
             Some(ext)
         } else {
             None
@@ -63,19 +69,68 @@ pub async fn upload_book(
             file_name,
             file_size,
             uploaded_at: Utc::now(),
+            normalization_version: 2,
         };
 
+        let journal = crate::db::store::Store::<crate::db::books::BooksData>::new(
+            state
+                .config
+                .data_dir
+                .join("imports")
+                .join(format!("{id}.toml")),
+        );
+        journal
+            .save(&crate::db::books::BooksData {
+                books: vec![book.clone()],
+            })
+            .await?;
+        fs::rename(&staged, &epub_path).await?;
+        fs::File::open(state.books_dir()).await?.sync_all().await?;
+        fs::File::open(state.covers_dir()).await?.sync_all().await?;
         let mut data_store = state.books.load().await?;
         data_store.books.push(book);
         state.books.save(&data_store).await?;
         state.invalidate_books_cache();
+        crate::state::remove_if_exists(
+            &state
+                .config
+                .data_dir
+                .join("imports")
+                .join(format!("{id}.toml")),
+        )
+        .await?;
 
         tracing::info!("Book uploaded: {id}");
 
-        return Ok(Redirect::to(&format!("/book/{id}?lang={lang}&theme={theme}")).into_response());
+        Ok(Redirect::to(&format!("/book/{id}?lang={lang}&theme={theme}")).into_response())
     }
-
-    Err(AppError::Internal("No file found in upload".into()))
+    .await;
+    if result.is_err() {
+        let _ = fs::remove_file(&staged).await;
+        let indexed = state
+            .books
+            .load()
+            .await?
+            .books
+            .iter()
+            .any(|book| book.id == id);
+        if !indexed {
+            crate::state::remove_if_exists(&epub_path).await?;
+            for ext in ["jpg", "png", "gif", "webp"] {
+                crate::state::remove_if_exists(&state.covers_dir().join(format!("{id}.{ext}")))
+                    .await?;
+            }
+            crate::state::remove_if_exists(
+                &state
+                    .config
+                    .data_dir
+                    .join("imports")
+                    .join(format!("{id}.toml")),
+            )
+            .await?;
+        }
+    }
+    result
 }
 
 /// GET /book/:id/download — stream the original EPUB as an attachment.
@@ -84,11 +139,7 @@ pub async fn download_book(
     Path(id): Path<String>,
     request: Request,
 ) -> Result<Response, AppError> {
-    let books = state.load_books().await?;
-    let book = books
-        .iter()
-        .find(|b| b.id == id)
-        .ok_or_else(|| AppError::NotFound("Book not found".into()))?;
+    let book = state.book(&id).await?;
 
     // Only use the stored UUID for the path; the upload filename is for display.
     let epub_path = state.books_dir().join(format!("{}.epub", book.id));
@@ -143,25 +194,18 @@ pub async fn delete_book(
     let lang = query.get("lang").map(|s| s.as_str()).unwrap_or("zh");
     let theme = query.get("theme").map(|s| s.as_str()).unwrap_or("light");
 
-    let mut data = state.books.load().await?;
-    let book = data
-        .books
-        .iter()
-        .find(|b| b.id == id)
-        .ok_or_else(|| AppError::NotFound("Book not found".into()))?;
-    let book = book.clone();
-
-    data.books.retain(|b| b.id != id);
-    state.books.save(&data).await?;
-    state.invalidate_books_cache();
-
-    let epub_path = state.books_dir().join(format!("{id}.epub"));
-    let _ = fs::remove_file(&epub_path).await;
-
-    if let Some(ext) = &book.cover_ext {
-        let cover_path = state.covers_dir().join(format!("{id}.{ext}"));
-        let _ = fs::remove_file(&cover_path).await;
-    }
+    state.book(&id).await?;
+    let journal = crate::db::store::Store::<crate::db::books::BooksData>::new(
+        state
+            .config
+            .data_dir
+            .join("deletions")
+            .join(format!("{id}.toml")),
+    );
+    journal
+        .save(&crate::db::books::BooksData::default())
+        .await?;
+    state.finish_delete(&id).await?;
 
     tracing::info!("Book deleted: {id}");
 

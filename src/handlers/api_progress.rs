@@ -24,6 +24,12 @@ pub async fn save_progress(
     State(state): State<AppState>,
     Json(input): Json<ProgressInput>,
 ) -> Result<Json<ProgressOutput>, AppError> {
+    let book = state.book(&input.book_id).await?;
+    crate::epub::migration::upgrade(&state, &book).await?;
+    if input.chapter >= book.chapter_count {
+        return Err(AppError::BadRequest("Chapter out of range".into()));
+    }
+    crate::validation::position(input.position)?;
     let mut data = state.progress.load().await?;
 
     let now = Utc::now();

@@ -5,4 +5,4 @@ pub mod api_recent;
 pub mod api_settings;
 pub mod library;
 pub mod reader;
-pub mod search;
+pub mod uploads;

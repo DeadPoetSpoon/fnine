@@ -18,6 +18,9 @@ struct IndexTemplate<'a> {
     books: &'a [Book],
     t: &'a Translations,
     theme: &'a str,
+    recent: Option<Book>,
+    sort: String,
+    status: String,
 }
 
 #[derive(Template)]
@@ -35,6 +38,8 @@ struct AnnotationDisplay {
     note: Option<String>,
     position_start: f64,
     created_at: String,
+    needs_review: bool,
+    color: String,
 }
 
 impl From<Annotation> for AnnotationDisplay {
@@ -50,6 +55,8 @@ impl From<Annotation> for AnnotationDisplay {
                 .with_timezone(&chrono::Local)
                 .format("%Y-%m-%d %H:%M:%S")
                 .to_string(),
+            needs_review: a.needs_review,
+            color: a.color,
         }
     }
 }
@@ -86,12 +93,59 @@ pub async fn home(
     State(state): State<AppState>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
-    let books = state.load_books().await?;
+    let mut books = state.load_books().await?;
+    let progress = state.load_progress().await?;
+    let recent = progress
+        .entries
+        .values()
+        .filter(|entry| books.iter().any(|book| book.id == entry.book_id))
+        .max_by_key(|entry| entry.updated_at)
+        .and_then(|entry| books.iter().find(|book| book.id == entry.book_id))
+        .cloned();
+    let sort = query
+        .get("sort")
+        .cloned()
+        .unwrap_or_else(|| "uploaded".into());
+    let status = query.get("status").cloned().unwrap_or_else(|| "all".into());
+    if !["uploaded", "last_read", "title", "author"].contains(&sort.as_str())
+        || !["all", "unread", "reading", "finished"].contains(&status.as_str())
+    {
+        return Err(AppError::BadRequest("Unsupported library filter".into()));
+    }
+    books.retain(|book| {
+        let entry = progress.entries.get(&book.id);
+        let finished = entry.is_some_and(|entry| {
+            entry.last_chapter.saturating_add(1) >= book.chapter_count
+                && entry.last_position >= 0.99
+        });
+        match status.as_str() {
+            "unread" => entry.is_none(),
+            "reading" => entry.is_some() && !finished,
+            "finished" => finished,
+            _ => true,
+        }
+    });
+    books.sort_by(|left, right| {
+        let ordering = match sort.as_str() {
+            "title" => left.title.to_lowercase().cmp(&right.title.to_lowercase()),
+            "author" => left.author.to_lowercase().cmp(&right.author.to_lowercase()),
+            "last_read" => progress
+                .entries
+                .get(&right.id)
+                .map(|entry| entry.updated_at)
+                .cmp(&progress.entries.get(&left.id).map(|entry| entry.updated_at)),
+            _ => right.uploaded_at.cmp(&left.uploaded_at),
+        };
+        ordering.then_with(|| left.id.cmp(&right.id))
+    });
     let (t, theme) = load_translations(&query);
     let tmpl = IndexTemplate {
         books: &books,
         t: &t,
         theme: &theme,
+        recent,
+        sort,
+        status,
     };
     tmpl.render()
         .map(|html| axum::response::Html(html).into_response())
@@ -116,6 +170,9 @@ pub async fn book_detail(
     Path(id): Path<String>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
+    crate::validation::id(&id)?;
+    let existing = state.book(&id).await?;
+    crate::epub::migration::upgrade(&state, &existing).await?;
     let books = state.load_books().await?;
     let book = books
         .iter()
@@ -155,6 +212,7 @@ pub async fn cover_image(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Response, AppError> {
+    crate::validation::id(&id)?;
     let books = state.load_books().await?;
     let book = books
         .iter()

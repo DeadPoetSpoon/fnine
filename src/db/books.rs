@@ -12,6 +12,12 @@ pub struct Book {
     pub file_name: String, // Original filename
     pub file_size: u64,
     pub uploaded_at: DateTime<Utc>,
+    #[serde(default = "legacy_version")]
+    pub normalization_version: u32,
+}
+
+fn legacy_version() -> u32 {
+    1
 }
 
 /// Top-level structure for `data/books.toml`.

@@ -12,6 +12,12 @@ pub struct Annotation {
     pub position_end: f64,
     pub color: String,
     pub created_at: DateTime<Utc>,
+    #[serde(default)]
+    pub needs_review: bool,
+    #[serde(default)]
+    pub prefix: String,
+    #[serde(default)]
+    pub suffix: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

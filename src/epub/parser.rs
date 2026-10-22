@@ -1,5 +1,36 @@
+pub use super::content::ChapterContent;
 use crate::error::AppError;
 use std::path::Path;
+
+pub fn validate_archive(path: &Path) -> Result<(), AppError> {
+    let file = std::fs::File::open(path)?;
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|error| AppError::BadRequest(format!("Invalid EPUB archive: {error}")))?;
+    if archive.len() > 10_000 {
+        return Err(AppError::TooLarge);
+    }
+    let mut total = 0u64;
+    for index in 0..archive.len() {
+        let mut entry = archive
+            .by_index(index)
+            .map_err(|error| AppError::BadRequest(error.to_string()))?;
+        if entry.enclosed_name().is_none() {
+            return Err(AppError::BadRequest("Unsafe EPUB resource path".into()));
+        }
+        if entry.size() > 16 * 1024 * 1024 {
+            return Err(AppError::TooLarge);
+        }
+        let actual = std::io::copy(
+            &mut std::io::Read::take(&mut entry, 16 * 1024 * 1024 + 1),
+            &mut std::io::sink(),
+        )?;
+        total += actual;
+        if actual > 16 * 1024 * 1024 || total > 256 * 1024 * 1024 {
+            return Err(AppError::TooLarge);
+        }
+    }
+    Ok(())
+}
 
 pub struct EpubMeta {
     pub title: String,
@@ -10,8 +41,9 @@ pub struct EpubMeta {
 }
 
 pub fn extract_metadata(path: &Path) -> Result<EpubMeta, AppError> {
+    validate_archive(path)?;
     let epub = rbook::Epub::open(path)
-        .map_err(|e| AppError::Internal(format!("EPUB parse error: {e}")))?;
+        .map_err(|e| AppError::BadRequest(format!("EPUB parse error: {e}")))?;
 
     let metadata = epub.metadata();
     let title = metadata
@@ -24,6 +56,9 @@ pub fn extract_metadata(path: &Path) -> Result<EpubMeta, AppError> {
         .map(|c| c.value().to_owned())
         .unwrap_or_else(|| "Unknown Author".into());
     let chapter_count = epub.spine().len() as u32;
+    if chapter_count == 0 {
+        return Err(AppError::BadRequest("EPUB has no reading spine".into()));
+    }
     let (cover_bytes, cover_ext) = extract_cover(&epub);
 
     Ok(EpubMeta {
@@ -53,7 +88,7 @@ fn extract_cover(epub: &rbook::Epub) -> (Option<Vec<u8>>, Option<String>) {
     (None, None)
 }
 
-fn infer_extension(data: &[u8]) -> Option<String> {
+pub(crate) fn infer_extension(data: &[u8]) -> Option<String> {
     if data.len() < 4 {
         return None;
     }
@@ -63,7 +98,7 @@ fn infer_extension(data: &[u8]) -> Option<String> {
         Some("png".into())
     } else if data.starts_with(b"GIF8") {
         Some("gif".into())
-    } else if data.starts_with(b"RIFF") && data.len() > 8 && &data[8..12] == b"WEBP" {
+    } else if data.starts_with(b"RIFF") && data.get(8..12) == Some(b"WEBP") {
         Some("webp".into())
     } else {
         None
@@ -72,28 +107,44 @@ fn infer_extension(data: &[u8]) -> Option<String> {
 
 // ── Chapter reading ────────────────────────────────────────
 
+#[derive(Debug, Clone)]
 pub struct ChapterEntry {
     pub index: usize,
     pub label: String,
 }
 
 pub fn extract_toc(path: &Path) -> Result<Vec<ChapterEntry>, AppError> {
+    validate_archive(path)?;
     let epub = rbook::Epub::open(path)
         .map_err(|e| AppError::Internal(format!("EPUB parse error: {e}")))?;
     let spine = epub.spine();
     let n = spine.len();
     let mut chapters = Vec::with_capacity(n);
     for i in 0..n {
-        let label = spine
+        let resource = spine
             .get(i)
-            .and_then(|s| s.id().map(|id| id.to_owned()))
+            .and_then(|entry| entry.manifest_entry())
+            .map(|entry| entry.href().path().to_string());
+        let label = epub
+            .toc()
+            .contents()
+            .and_then(|root| {
+                root.flatten()
+                    .find(|entry| {
+                        entry
+                            .href()
+                            .is_some_and(|href| Some(href.path().to_string()) == resource)
+                    })
+                    .map(|entry| entry.label().to_string())
+            })
+            .filter(|label| !label.is_empty())
             .unwrap_or_else(|| format!("Chapter {}", i + 1));
         chapters.push(ChapterEntry { index: i, label });
     }
     Ok(chapters)
 }
 
-pub fn read_chapter(path: &Path, index: usize) -> Result<String, AppError> {
+pub fn legacy_chapter(path: &Path, index: usize) -> Result<String, AppError> {
     let epub = rbook::Epub::open(path)
         .map_err(|e| AppError::Internal(format!("EPUB parse error: {e}")))?;
     let spine = epub.spine();
@@ -107,6 +158,21 @@ pub fn read_chapter(path: &Path, index: usize) -> Result<String, AppError> {
         .read_str()
         .map_err(|e| AppError::Internal(format!("Read chapter error: {e}")))?;
     Ok(strip_html(&html))
+}
+
+pub fn read_chapter(path: &Path, index: usize) -> Result<ChapterContent, AppError> {
+    validate_archive(path)?;
+    let epub = rbook::Epub::open(path).map_err(|error| AppError::BadRequest(error.to_string()))?;
+    let entry = epub
+        .spine()
+        .get(index)
+        .and_then(|entry| entry.manifest_entry())
+        .ok_or_else(|| AppError::NotFound("Chapter not found".into()))?;
+    let source = entry.href().path().to_string();
+    let html = entry
+        .read_str()
+        .map_err(|error| AppError::BadRequest(error.to_string()))?;
+    super::content::extract(&epub, &source, &html)
 }
 
 // ── HTML stripping ─────────────────────────────────────────

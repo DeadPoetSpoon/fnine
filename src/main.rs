@@ -5,7 +5,11 @@ mod epub;
 mod error;
 mod handlers;
 mod i18n;
+mod middleware;
 mod state;
+#[cfg(test)]
+mod tests;
+mod validation;
 
 use axum::extract::DefaultBodyLimit;
 use axum::{Router, routing::get, routing::post};
@@ -14,7 +18,7 @@ use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::services::ServeDir;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize tracing
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -22,17 +26,21 @@ async fn main() {
         )
         .init();
 
-    let config = config::Config::from_env();
+    let config = config::Config::from_env()?;
     let state = AppState::new(config.clone());
+    let _data_lock = state.initialize().await?;
+    let app = router(state);
+    let address = std::net::SocketAddr::new(config.host.parse()?, config.port);
+    let listener = tokio::net::TcpListener::bind(address).await?;
+    tracing::info!(%address, "Starting Fnine");
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown())
+        .await?;
+    Ok(())
+}
 
-    // Ensure data directories exist
-    let _ = tokio::fs::create_dir_all(&config.data_dir).await;
-    let _ = tokio::fs::create_dir_all(state.books_dir()).await;
-    let _ = tokio::fs::create_dir_all(state.covers_dir()).await;
-    let _ = tokio::fs::create_dir_all(state.fonts_dir()).await;
-    let _ = tokio::fs::create_dir_all(config.data_dir.join("annotations")).await;
-
-    let app = Router::new()
+fn router(state: AppState) -> Router {
+    Router::new()
         // ── Pages ──────────────────────────────────────
         .route("/", get(handlers::library::home))
         .route("/upload", get(handlers::library::upload_form))
@@ -41,14 +49,23 @@ async fn main() {
             "/book/{id}/download",
             get(handlers::api_books::download_book),
         )
-        // ── Search ──────────────────────────────────────
-        .route("/search", get(handlers::search::search))
         // ── Settings ────────────────────────────────────
         .route(
             "/settings",
             get(handlers::api_settings::settings_page).post(handlers::api_settings::save_settings),
         )
-        .route("/settings/fonts", post(handlers::api_settings::upload_font))
+        .route(
+            "/settings/fonts",
+            post(handlers::api_settings::upload_font)
+                .layer::<_, std::convert::Infallible>(DefaultBodyLimit::max(
+                    10 * 1024 * 1024 + 64 * 1024,
+                ))
+                .layer(RequestBodyLimitLayer::new(10 * 1024 * 1024 + 64 * 1024)),
+        )
+        .route(
+            "/settings/fonts/{id}/style.css",
+            get(handlers::api_settings::font_css),
+        )
         .route(
             "/settings/fonts/delete",
             post(handlers::api_settings::delete_font),
@@ -65,7 +82,10 @@ async fn main() {
         .route(
             "/upload",
             post(handlers::api_books::upload_book)
-                .layer(RequestBodyLimitLayer::new(50 * 1024 * 1024)), // 50 MB
+                .layer::<_, std::convert::Infallible>(DefaultBodyLimit::max(
+                    50 * 1024 * 1024 + 64 * 1024,
+                ))
+                .layer(RequestBodyLimitLayer::new(50 * 1024 * 1024 + 64 * 1024)),
         )
         .route("/book/{id}/delete", post(handlers::api_books::delete_book))
         // ── Progress ───────────────────────────────────
@@ -80,17 +100,36 @@ async fn main() {
         )
         .route(
             "/api/book/{id}/annotations/{aid}",
-            post(handlers::api_annotations::delete_annotation),
+            post(handlers::api_annotations::delete_annotation)
+                .patch(handlers::api_annotations::edit_annotation),
+        )
+        .route(
+            "/book/{id}/annotations/export",
+            get(handlers::api_annotations::export_annotations),
         )
         // ── Static files ───────────────────────────────
         .nest_service("/static", ServeDir::new("static"))
-        .nest_service("/fonts", ServeDir::new(config.data_dir.join("fonts")))
-        .layer(DefaultBodyLimit::disable())
-        .with_state(state);
+        .route("/fonts/{id}", get(handlers::api_settings::font_file))
+        .layer(DefaultBodyLimit::max(256 * 1024))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            middleware::coordinate,
+        ))
+        .layer(tower_http::trace::TraceLayer::new_for_http())
+        .with_state(state)
+}
 
-    let addr = format!("{}:{}", config.host, config.port);
-    tracing::info!("Starting server on http://{addr}");
-
-    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+async fn shutdown() {
+    #[cfg(unix)]
+    {
+        if let Ok(mut terminate) =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        {
+            tokio::select! { _ = tokio::signal::ctrl_c() => {}, _ = terminate.recv() => {} }
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+    }
 }

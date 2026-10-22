@@ -1,7 +1,8 @@
 [package]
 name = "fnine"
-version = "0.6.1"
+version = "0.7.0"
 edition = "2024"
+rust-version = "1.96"
 
 [dependencies]
 askama = { version = "0.16.0", features = ["std", "derive"] }
@@ -11,9 +12,16 @@ rbook = "0.7.9"
 serde = { version = "1.0.228", features = ["derive"] }
 tokio = { version = "1.52.3", features = ["full"] }
 toml = "1.1.2"
-tower = "0.5.3"
+tower = { version = "0.5.3", features = ["util"] }
 tower-http = { version = "0.7.0", features = ["fs", "limit", "trace"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 uuid = { version = "1.23.3", features = ["v4"] }
 serde_json = "1.0"
+scraper = "0.24"
+percent-encoding = "2.3"
+zip = { version = "8.6", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+tempfile = "3"
+http-body-util = "0.1"
