@@ -21,9 +21,26 @@
   let saving = false;
   let annotations = [];
 
+  content.querySelectorAll(".fn-ref").forEach(function (reference) {
+    const previous = reference.previousSibling;
+    if (previous?.nodeType === Node.ELEMENT_NODE && previous.classList.contains("note-anchor")) {
+      previous.append(reference);
+      return;
+    }
+    if (previous?.nodeType !== Node.TEXT_NODE) return;
+    const tail = previous.textContent.match(/\S[ \t]*$/u);
+    if (!tail || tail.index + tail[0].length !== previous.textContent.length) return;
+    const attached = previous.splitText(tail.index);
+    const anchor = document.createElement("span");
+    anchor.className = "note-anchor";
+    reference.before(anchor);
+    anchor.append(attached, reference);
+  });
+
   function message(failed) {
-    status.textContent = failed ? status.dataset.error : status.dataset.saved;
+    status.textContent = failed ? status.dataset.error : "";
     status.classList.toggle("save-error", failed);
+    status.hidden = !failed;
   }
 
   let sidebarOpen = !window.matchMedia("(max-width: 767px)").matches;

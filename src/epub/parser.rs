@@ -111,6 +111,17 @@ pub(crate) fn infer_extension(data: &[u8]) -> Option<String> {
 pub struct ChapterEntry {
     pub index: usize,
     pub label: String,
+    pub continuation: usize,
+}
+
+impl ChapterEntry {
+    pub fn display_label(&self, continued: &str) -> String {
+        match self.continuation {
+            0 => self.label.clone(),
+            1 => format!("{} ({continued})", self.label),
+            number => format!("{} ({continued} {number})", self.label),
+        }
+    }
 }
 
 pub fn extract_toc(path: &Path) -> Result<Vec<ChapterEntry>, AppError> {
@@ -119,27 +130,37 @@ pub fn extract_toc(path: &Path) -> Result<Vec<ChapterEntry>, AppError> {
         .map_err(|e| AppError::Internal(format!("EPUB parse error: {e}")))?;
     let spine = epub.spine();
     let n = spine.len();
-    let mut chapters = Vec::with_capacity(n);
+    let mut labels = std::collections::HashMap::new();
+    if let Some(root) = epub.toc().contents() {
+        for entry in root.flatten() {
+            let label = entry.label().trim();
+            if !label.is_empty()
+                && !label.eq_ignore_ascii_case("null")
+                && let Some(href) = entry.href()
+            {
+                labels
+                    .entry(href.path().to_string())
+                    .or_insert_with(|| label.to_string());
+            }
+        }
+    }
+    let mut chapters: Vec<ChapterEntry> = Vec::with_capacity(n);
     for i in 0..n {
         let resource = spine
             .get(i)
             .and_then(|entry| entry.manifest_entry())
             .map(|entry| entry.href().path().to_string());
-        let label = epub
-            .toc()
-            .contents()
-            .and_then(|root| {
-                root.flatten()
-                    .find(|entry| {
-                        entry
-                            .href()
-                            .is_some_and(|href| Some(href.path().to_string()) == resource)
-                    })
-                    .map(|entry| entry.label().to_string())
-            })
-            .filter(|label| !label.is_empty())
-            .unwrap_or_else(|| format!("Chapter {}", i + 1));
-        chapters.push(ChapterEntry { index: i, label });
+        let label = resource.and_then(|resource| labels.get(&resource).cloned());
+        let (label, continuation) = match (label, chapters.last()) {
+            (Some(label), _) => (label, 0),
+            (None, Some(previous)) => (previous.label.clone(), previous.continuation + 1),
+            (None, None) => (format!("Chapter {}", i + 1), 0),
+        };
+        chapters.push(ChapterEntry {
+            index: i,
+            label,
+            continuation,
+        });
     }
     Ok(chapters)
 }

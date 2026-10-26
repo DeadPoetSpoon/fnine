@@ -15,6 +15,73 @@ async function dismissNote(page, action) {
   await page.locator('#endnote-dialog[data-close-complete="true"]').waitFor({ state: "attached" });
 }
 
+async function waitForProgressSave(page, action) {
+  const saved = page.waitForResponse(function (response) {
+    return new URL(response.url()).pathname === "/api/progress" && response.request().method() === "POST" && response.ok();
+  });
+  await action();
+  await (await saved).finished();
+}
+
+async function checkReaderStatus(page, failed = false) {
+  assert.equal(await page.locator("#reader-status").count(), 1);
+  if (!failed) {
+    await page.waitForFunction(function () {
+      const status = document.getElementById("reader-status");
+      return status.hidden && status.textContent === "" && !status.classList.contains("save-error");
+    });
+    assert.ok(await page.locator("#reader-status").evaluate(function (status) { return !!status.closest(".reader-toolbar") && status.getClientRects().length === 0; }), "Successful saves must not display a status or reserve toolbar space");
+    return;
+  }
+  await page.waitForFunction(function () {
+    const status = document.getElementById("reader-status");
+    return !status.hidden && status.classList.contains("save-error") && status.textContent.trim().length > 0;
+  });
+  assert.ok(await page.locator("#reader-status").evaluate(function (status) {
+    const toolbar = status.closest(".reader-toolbar");
+    if (!toolbar) return false;
+    const parent = toolbar.getBoundingClientRect();
+    const bounds = status.getBoundingClientRect();
+    return bounds.width > 0 && bounds.height > 0 && bounds.left >= parent.left && bounds.right <= parent.right && bounds.top >= parent.top && bounds.bottom <= parent.bottom && parent.left >= 0 && parent.right <= window.innerWidth;
+  }), "Save status must fit inside the top reader toolbar");
+}
+
+async function checkNotePosition(page) {
+  const failures = await page.evaluate(function () {
+    const failures = [];
+    const sample = document.createElement("div");
+    sample.style.cssText = "position:fixed;top:0;left:0;font:20px/2 sans-serif;white-space:normal;";
+    const anchor = document.querySelector("#chapter-text .fn-ref").closest(".note-anchor").cloneNode(true);
+    const marker = anchor.querySelector(".fn-ref");
+    marker.textContent = "123";
+    marker.removeAttribute("data-note");
+    const text = document.createTextNode("");
+    sample.append(text, anchor);
+    document.body.append(sample);
+    for (const words of ["甲乙丙丁", "one two word"]) {
+      text.textContent = words.slice(0, -1);
+      anchor.firstChild.textContent = words.slice(-1);
+      for (let width = 65; width <= 200; width++) {
+        sample.style.width = width + "px";
+        const preceding = document.createRange();
+        preceding.selectNodeContents(anchor.firstChild);
+        const reference = document.createRange();
+        reference.selectNodeContents(marker);
+        const word = preceding.getBoundingClientRect();
+        const number = reference.getBoundingClientRect();
+        if (number.left < word.right - 1 || number.left > word.right + 1 || number.top >= word.top || number.bottom >= word.bottom) {
+          failures.push({ words, width, word: word.toJSON(), number: number.toJSON() });
+          break;
+        }
+      }
+      if (sample.textContent !== words + "123") failures.push("Note styling changed text coordinates");
+    }
+    sample.remove();
+    return failures;
+  });
+  assert.deepEqual(failures, [], "Note markers must stay at the upper-right of their preceding text, including at line breaks");
+}
+
 async function checkSelect(locator) {
   const styles = await locator.evaluate(function (select) {
     const style = getComputedStyle(select);
@@ -102,10 +169,23 @@ async function run() {
     await page.locator(".upload-form").getByRole("button", { name: "Upload" }).click();
     await page.waitForURL("**/book/*?lang=en&theme=dark");
     const bookPath = new URL(page.url()).pathname;
-    await page.getByRole("link", { name: "Start Reading" }).click();
+    await waitForProgressSave(page, function () { return page.getByRole("link", { name: "Start Reading" }).click(); });
     await page.waitForURL("**/read/0?lang=en&theme=dark");
-    await page.waitForFunction(function () { return document.getElementById("reader-status").textContent === "Saved"; });
     assert.match(await page.locator(".chapter-title").textContent(), /Actual chapter title/);
+    await checkReaderStatus(page);
+    const originalPage = await context.request.get(page.url());
+    assert.ok(originalPage.ok());
+    assert.ok(await page.evaluate(function (html) {
+      const original = new DOMParser().parseFromString(html, "text/html");
+      return original.getElementById("chapter-text").textContent === document.getElementById("chapter-text").textContent;
+    }, await originalPage.text()), "Attaching note markers must preserve the exact chapter text");
+    const repeatedReferences = page.locator('[data-note="note-0"]');
+    assert.ok(await repeatedReferences.last().evaluate(function (reference) { return !reference.closest(".note-anchor"); }), "A paragraph-start reference must not attach to the preceding paragraph");
+    assert.ok(await repeatedReferences.nth((await repeatedReferences.count()) - 2).evaluate(function (reference) {
+      const anchor = reference.closest(".note-anchor");
+      return anchor.firstChild.textContent === "😀" && anchor.querySelectorAll(".fn-ref").length === 2;
+    }), "Adjacent references must remain together without splitting Unicode characters");
+    await checkNotePosition(page);
     assert.ok(await page.evaluate(async function () {
       await document.fonts.load('18px "FnineCustom"');
       return Array.from(document.fonts).some(function (font) { return font.family === "FnineCustom" && font.status === "loaded"; });
@@ -161,8 +241,8 @@ async function run() {
     const text = await page.locator("#chapter-text").textContent();
     const overlap = await context.request.post(base + `/api/book/${bookId}/annotations`, { data: { chapter: 0, selected_text: text.slice(3, 12), note: "Overlap", position_start: 3 / text.length, position_end: 12 / text.length, color: "#ffb3c6" } });
     assert.ok(overlap.ok());
-    await page.reload();
-    await page.waitForFunction(function () { return document.getElementById("reader-status").textContent === "Saved"; });
+    await waitForProgressSave(page, function () { return page.reload(); });
+    await checkReaderStatus(page);
     assert.ok(await page.locator("mark").count() >= 3);
     assert.equal(await page.locator("#chapter-text").textContent(), text);
 
@@ -170,18 +250,20 @@ async function run() {
     await page.waitForTimeout(900);
     const saved = await (await context.request.get(base + "/api/recent")).json();
     assert.ok(saved.progress.position > 0.2 && saved.progress.position < 0.8);
-    await page.reload();
-    await page.waitForFunction(function () { return document.getElementById("reader-status").textContent === "Saved"; });
+    await waitForProgressSave(page, function () { return page.reload(); });
+    await checkReaderStatus(page);
     const restored = await (await context.request.get(base + "/api/recent")).json();
     assert.ok(Math.abs(restored.progress.position - saved.progress.position) < 0.02);
 
     await page.setViewportSize({ width: 390, height: 844 });
+    await checkNotePosition(page);
     await page.evaluate(function () { localStorage.removeItem("fnine-sidebar"); });
     await page.reload();
     await page.locator("#toc-open-btn").click();
     assert.ok(await page.locator("#toc-sidebar").evaluate(function (sidebar) { return sidebar.classList.contains("open") && sidebar.getBoundingClientRect().left >= 0; }));
     await page.keyboard.press("Escape");
     assert.ok(await page.locator("#toc-sidebar").evaluate(function (sidebar) { return sidebar.hidden; }));
+    await checkReaderStatus(page);
     await page.locator('[data-note="note-0"]').first().click();
     assert.ok(await page.locator("#endnote-dialog").evaluate(function (dialog) { return dialog.getBoundingClientRect().width < window.innerWidth; }));
     assert.ok(await page.locator("#endnote-dialog").evaluate(function (dialog) { return dialog.scrollHeight > dialog.clientHeight; }));
@@ -223,12 +305,28 @@ async function run() {
     assert.equal(await page.locator("#library-sort").evaluate(function (select) { return getComputedStyle(select).appearance; }), "auto");
     await page.emulateMedia({ forcedColors: "none" });
 
-    await page.goto(base + bookPath + "/read/0");
-    await page.waitForFunction(function () { return document.getElementById("reader-status").textContent === "Saved"; });
+    await waitForProgressSave(page, function () { return page.goto(base + bookPath + "/read/0"); });
+    await checkReaderStatus(page);
     await page.route("**/api/progress", function (route) { return route.fulfill({ status: 500, body: "simulated failure" }); });
     await page.evaluate(function () { window.scrollBy(0, 500); });
     await page.waitForFunction(function () { return document.getElementById("reader-status").classList.contains("save-error"); });
+    await checkReaderStatus(page, true);
     await page.unroute("**/api/progress");
+    await waitForProgressSave(page, function () { return page.evaluate(function () { window.scrollBy(0, 100); }); });
+    await checkReaderStatus(page);
+    for (const [chapter, language, expected] of [
+      [1, "en", "Actual chapter title (continued)"],
+      [2, "en", "Actual chapter title (continued 2)"],
+      [2, "zh", "Actual chapter title (续 2)"],
+      [3, "en", "Next chapter"],
+      [4, "en", "Next chapter (continued)"],
+      [1, "en", "Actual chapter title (continued)"],
+    ]) {
+      await page.goto(base + bookPath + `/read/${chapter}?lang=${language}`);
+      assert.equal(await page.locator(".chapter-title").textContent(), expected);
+      assert.equal(await page.locator(".toc-item.active").textContent(), expected);
+      assert.equal(await page.locator("#reader-app").getAttribute("data-chapter"), String(chapter));
+    }
     if (process.env.FNINE_TEST_BOOKS) {
       const directory = path.resolve(process.env.FNINE_TEST_BOOKS);
       for (const filename of fs.readdirSync(directory).filter(function (filename) { return filename.endsWith(".epub"); })) {
@@ -260,7 +358,7 @@ async function run() {
       }
     }
     assert.deepEqual(errors, []);
-    console.log("Chromium checks passed: actual/long endnotes, keyboard/focus, font upload/loading, preferences, annotation creation/edit/overlap/export, mobile TOC, progress restore, filters, save failures.");
+    console.log("Chromium checks passed: attached superscript markers, localized continuation titles, actual/long endnotes, keyboard/focus, font upload/loading, preferences, annotation creation/edit/overlap/export, mobile TOC, progress restore, filters, save failures.");
   } catch (error) {
     console.error(serverOutput);
     throw error;

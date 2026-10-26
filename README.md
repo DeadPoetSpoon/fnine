@@ -5,8 +5,8 @@ A self-hosted EPUB reading service written in Rust. Upload, manage, and read you
 ## Features
 
 - **EPUB Upload** — Supports EPUB 2 and EPUB 3 formats. Metadata (title, author, cover) is extracted automatically.
-- **Online Reader** — Clean chapter-by-chapter reading experience with a built-in table of contents sidebar.
-- **Publisher Endnotes** — Select a footnote/endnote reference to open its actual text in an accessible popup, including separate note documents, CSS-styled superscripts, and locally grouped circled-number notes without links.
+- **Online Reader** — Clean chapter-by-chapter reading experience with a built-in table of contents sidebar. Untitled spine parts inherit the previous chapter's title with numbered, localized continuation labels.
+- **Publisher Endnotes** — Compact superscript markers stay attached to their preceding text. Select a marker to open its actual text in an accessible popup, including separate note documents, CSS-styled superscripts, and locally grouped circled-number notes without links.
 - **Reading Progress** — Scroll position is saved automatically so you can resume where you left off.
 - **Annotations & Notes** — Highlight text, choose a color, and attach personal notes to any passage.
 - **Library Controls** — Continue reading, sort by title/author/upload/last-read, and filter unread, reading, or finished books.

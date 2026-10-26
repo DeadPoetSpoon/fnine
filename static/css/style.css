@@ -548,6 +548,7 @@ select option {
 
 .chapter-title {
     flex: 1;
+    min-width: 0;
     font-weight: 600;
     font-size: 0.9rem;
     overflow: hidden;
@@ -700,9 +701,20 @@ html:-webkit-full-screen .fullscreen-exit-fab {
 }
 
 /* === Footnotes === */
+.note-anchor {
+    white-space: nowrap;
+    word-break: normal;
+    overflow-wrap: normal;
+}
+
 .fn-ref {
     font: inherit;
+    font-size: 0.7em;
+    line-height: 1;
+    vertical-align: super;
     display: inline;
+    white-space: nowrap;
+    margin: 0;
     padding: 0;
     border: 0;
     background: transparent;
@@ -783,7 +795,7 @@ html:-webkit-full-screen .fullscreen-exit-fab {
 .note-body { white-space: pre-wrap; overflow-wrap: anywhere; margin: 1rem 0; line-height: 1.8; }
 .note-dialog textarea { display: block; width: 100%; min-height: 6rem; margin: .75rem 0; }
 .note-dialog select { display: block; width: 100%; margin: .5rem 0; }
-.reader-status { min-height: 1.5rem; font-size: .8rem; color: var(--color-text-muted); }
+.reader-status { flex: 0 1 auto; min-width: 0; max-width: 40%; font-size: .8rem; line-height: 1.4; overflow-wrap: anywhere; color: var(--color-text-muted); }
 .save-error { color: #c33; }
 .annotate-selection { position: fixed; bottom: 1rem; right: 1rem; z-index: 300; }
 [hidden] { display: none !important; }

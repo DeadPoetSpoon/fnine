@@ -20,6 +20,7 @@
         <div class="reader-toolbar">
             <button class="btn-icon" data-action="open-toc" aria-label="{{ t.get("reader.open_toc") }}" aria-controls="toc-sidebar" aria-expanded="false" id="toc-open-btn">☰</button>
             <span class="chapter-title">{{ chapter_label }}</span>
+            <span id="reader-status" class="reader-status" role="status" aria-live="polite" data-error="{{ t.get("reader.save_failed") }}" hidden></span>
             {% if last_chapter > 0 || last_position > 0.0 %}
             <a href="/book/{{ book_id }}/read/{{ last_chapter }}?pos={{ last_position }}&lang={{ t.lang() }}&theme={{ theme }}" class="btn btn-secondary btn-sm" id="jump-last-btn">{{ t.get("reader.jump_last") }}</a>
             {% endif %}
@@ -28,7 +29,6 @@
             </button>
         </div>
         <article class="chapter-content" id="chapter-content"><pre id="chapter-text" class="plain-text{% if !custom_font.is_empty() %} custom-font{% endif %}" style="font-size: {{ font_size }}px">{% for run in chapter_content.runs %}{% if run.note_key.is_empty() %}{{ run.text }}{% else %}<button type="button" class="fn-ref" data-note="{{ run.note_key }}" aria-haspopup="dialog" aria-controls="endnote-dialog">{{ run.text }}</button>{% endif %}{% endfor %}</pre></article>
-        <p id="reader-status" class="reader-status" role="status" aria-live="polite" data-error="{{ t.get("reader.save_failed") }}" data-saved="{{ t.get("reader.saved") }}"></p>
         <nav class="reader-nav">
             {% if chapter_index > 0 %}
             <a href="/book/{{ book_id }}/read/{{ chapter_index - 1 }}?lang={{ t.lang() }}&theme={{ theme }}" class="btn btn-secondary">← {{ t.get("reader.prev_chapter") }}</a>

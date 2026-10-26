@@ -19,6 +19,7 @@ upload_btn = "上传"
 cancel = "取消"
 
 [reader]
+continued = "续"
 prev_chapter = "上一章"
 next_chapter = "下一章"
 toc = "目录"

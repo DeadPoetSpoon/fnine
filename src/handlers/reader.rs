@@ -62,7 +62,7 @@ pub async fn read_chapter_handler(
 
     let epub_path = state.books_dir().join(format!("{}.epub", book.id));
 
-    let toc = if let Some(toc) = state.toc_cache.get(&id) {
+    let mut toc = if let Some(toc) = state.toc_cache.get(&id) {
         toc
     } else {
         let path = epub_path.clone();
@@ -94,7 +94,6 @@ pub async fn read_chapter_handler(
     }
 
     let content = state.chapter(&id, chapter).await?;
-    let label = toc[chapter].label.clone();
 
     let progress = state.load_progress().await?;
 
@@ -127,6 +126,11 @@ pub async fn read_chapter_handler(
         .filter(|s| !s.is_empty())
         .unwrap_or("light");
     let t = Translations::load(lang);
+    let continued = t.get("reader.continued");
+    for entry in &mut toc {
+        entry.label = entry.display_label(&continued);
+    }
+    let label = toc[chapter].label.clone();
 
     let settings = state.load_settings().await?;
     let custom_font = if settings.font_family.is_empty()

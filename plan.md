@@ -1,6 +1,6 @@
 # Fnine — consolidated implementation plan
 
-Updated: October 22, 2026. Release: v0.7.0. Target: private, single-user, text-first EPUB reading.
+Updated: October 26, 2026. Release: v0.7.1. Target: private, single-user, text-first EPUB reading.
 Keep Rust/Axum/Askama, TOML persistence, and compatible existing routes. No accounts,
 database rewrite, raw EPUB HTML rendering, or network retrieval of publisher content.
 
@@ -48,6 +48,15 @@ recorded separately rather than treating an unexecuted check as a pass.
 ## C. Reader, library, and deployment
 
 - Implemented: real EPUB navigation labels and spine mapping; coherent accessible mobile TOC.
+- Implemented after v0.7.0: absent, blank, or literal `null` navigation titles inherit the
+  previous chapter's base name with localized `(continued)`, `(continued 2)` / `(续)`, `(续 2)`
+  suffixes. A real title resets the sequence; an untitled first chapter keeps `Chapter 1`.
+  Spine indices and stored progress/annotations do not change; cached titles remain language-neutral.
+- Implemented after v0.7.0: compact superscript note markers stay grouped with the preceding
+  character at line breaks, with adjacent references sharing the group. DOM grouping adds no
+  text and keeps keyboard activation and clickable marker height.
+- Implemented after v0.7.0: save failures appear in the top reader toolbar; successful saves
+  remain silent and clear previous warnings without reserving toolbar space. Autosave is unchanged.
 - Implemented: query override → saved settings → defaults; safe generated custom-font CSS.
 - Implemented: browser-compatible character coordinates; queued saves on chapter entry,
   scroll, visibility/page exit; layout/font-aware restore and visible save failures.
@@ -81,13 +90,24 @@ recorded separately rather than treating an unexecuted check as a pass.
 
 ## Verification record
 
+- Release v0.7.1: formatting, strict Clippy, 25 release-mode Rust tests, release build,
+  JavaScript syntax checks, and the read-only EPUB audit passed (773 resolved references).
+  Chromium passed attached superscripts, localized continuation titles, hidden successful-save
+  status, toolbar failure warnings and recovery, desktop/mobile layout, and both real EPUB popups.
+  Firefox remains skipped. Docker runtime validation remains delegated to the tagged release workflow.
+- October 26 follow-up: formatting, strict Clippy, 25 Rust tests, release build, and the
+  read-only local EPUB audit passed (773 resolved references; chapter text unchanged).
+  Chromium passed desktop/mobile marker positioning across 65–200 px sample widths,
+  exact text preservation, Unicode/adjacent references, paragraph boundaries, localized
+  continuation titles and language-neutral cache reuse, plus both real-book popups and
+  existing reader regressions. Firefox remains skipped.
 - Release v0.7.0 revalidation: formatting, strict Clippy, 24 release-mode Rust tests,
   release build, real-book audit (773 resolved references), workflow syntax checks, and
   Chromium with both supplied EPUBs passed. Browser tests await the dialog close event
   before refocusing another note, avoiding a deferred focus-return race in the test harness.
 - `cargo fmt --all -- --check`
 - `cargo clippy --locked --offline --all-targets -- -D warnings`
-- `cargo test --locked --offline`: 24 passed; two opt-in helpers ignored (fixture generator
+- `cargo test --locked --offline --release`: 25 passed; two opt-in helpers ignored (fixture generator
   and local EPUB audit), both separately executed successfully.
 - `cargo build --locked --offline --release`
 - `npm run test:browser`: Chromium suite passed, including real TTF upload/loading,

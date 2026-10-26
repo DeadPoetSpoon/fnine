@@ -14,12 +14,54 @@ use std::io::Write;
 use tower::ServiceExt;
 
 fn fixture(path: &std::path::Path, version: &str, chapter: &str, notes: &str) {
+    fixture_with_titles(
+        path,
+        version,
+        chapter,
+        notes,
+        &[Some("Actual chapter title")],
+    );
+}
+
+fn fixture_with_titles(
+    path: &std::path::Path,
+    version: &str,
+    chapter: &str,
+    notes: &str,
+    titles: &[Option<&str>],
+) {
     let file = std::fs::File::create(path).unwrap();
     let mut archive = zip::ZipWriter::new(file);
     let options =
         zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
-    let opf = format!(
+    let mut opf = format!(
         r#"<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="{version}" unique-identifier="uid"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="uid">test</dc:identifier><dc:title>Fixture Book</dc:title><dc:creator>Test Author</dc:creator><dc:language>en</dc:language><meta property="dcterms:modified">2026-10-22T00:00:00Z</meta></metadata><manifest><item id="chapter" href="chapters/one.xhtml" media-type="application/xhtml+xml"/><item id="notes" href="notes.xhtml" media-type="application/xhtml+xml"/><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/><item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/></manifest><spine toc="ncx"><itemref idref="chapter"/></spine></package>"#
+    );
+    let mut manifest = String::new();
+    let mut spine = String::new();
+    let mut navigation = String::new();
+    let mut points = String::new();
+    for (index, title) in titles.iter().enumerate() {
+        let href = if index == 0 {
+            "chapters/one.xhtml".to_string()
+        } else {
+            manifest.push_str(&format!(r#"<item id="part{index}" href="chapters/part{index}.xhtml" media-type="application/xhtml+xml"/>"#));
+            spine.push_str(&format!(r#"<itemref idref="part{index}"/>"#));
+            format!("chapters/part{index}.xhtml")
+        };
+        if let Some(title) = title {
+            navigation.push_str(&format!(r#"<li><a href="{href}">{title}</a></li>"#));
+            points.push_str(&format!(r#"<navPoint id="point{index}" playOrder="{}"><navLabel><text>{title}</text></navLabel><content src="{href}"/></navPoint>"#, index + 1));
+        }
+    }
+    opf = opf
+        .replace("</manifest>", &format!("{manifest}</manifest>"))
+        .replace("</spine>", &format!("{spine}</spine>"));
+    let nav = format!(
+        r#"<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Contents</title></head><body><nav epub:type="toc"><ol>{navigation}</ol></nav></body></html>"#
+    );
+    let ncx = format!(
+        r#"<?xml version="1.0"?><ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1"><head><meta name="dtb:uid" content="test"/></head><docTitle><text>Fixture</text></docTitle><navMap>{points}</navMap></ncx>"#
     );
     let resources = [
         ("mimetype", "application/epub+zip"),
@@ -30,24 +72,73 @@ fn fixture(path: &std::path::Path, version: &str, chapter: &str, notes: &str) {
         ("OEBPS/package.opf", opf.as_str()),
         ("OEBPS/chapters/one.xhtml", chapter),
         ("OEBPS/notes.xhtml", notes),
-        (
-            "OEBPS/nav.xhtml",
-            r#"<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Contents</title></head><body><nav epub:type="toc"><ol><li><a href="chapters/one.xhtml">Actual chapter title</a></li></ol></nav></body></html>"#,
-        ),
-        (
-            "OEBPS/toc.ncx",
-            r#"<?xml version="1.0"?><ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1"><head><meta name="dtb:uid" content="test"/></head><docTitle><text>Fixture</text></docTitle><navMap><navPoint id="one" playOrder="1"><navLabel><text>Actual chapter title</text></navLabel><content src="chapters/one.xhtml"/></navPoint></navMap></ncx>"#,
-        ),
+        ("OEBPS/nav.xhtml", nav.as_str()),
+        ("OEBPS/toc.ncx", ncx.as_str()),
     ];
     for (name, body) in resources {
         archive.start_file(name, options).unwrap();
         archive.write_all(body.as_bytes()).unwrap();
+    }
+    for index in 1..titles.len() {
+        archive
+            .start_file(format!("OEBPS/chapters/part{index}.xhtml"), options)
+            .unwrap();
+        archive.write_all(chapter.as_bytes()).unwrap();
     }
     archive.finish().unwrap();
 }
 
 const CHAPTER: &str = r##"<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Hidden title</title><style>.hidden {}</style></head><body><p>First &#65; &amp; second [12].</p><p>Unicode 中文 😀.</p><p>Read<a epub:type="noteref" href="../notes.xhtml#note%201">1</a> and <a role="doc-noteref" href="#local">2</a>, repeat <a epub:type="noteref" href="../notes.xhtml#note%201">1</a>, missing <a epub:type="noteref" href="../notes.xhtml#missing">3</a>, remote <a epub:type="noteref" href="https://example.invalid/notes#note">4</a>.</p><aside epub:type="footnote" id="local"><p>Local note body.</p></aside><script>DO_NOT_SHOW</script></body></html>"##;
 const NOTES: &str = r##"<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Notes</title></head><body><aside epub:type="endnote" id="note 1"><p>The actual endnote text 中文.</p><p>A second paragraph &amp; entity.</p><a role="doc-backlink" href="chapters/one.xhtml#ref1">↩</a></aside></body></html>"##;
+
+#[test]
+fn names_untitled_spine_parts_as_numbered_continuations() {
+    let directory = tempfile::tempdir().unwrap();
+    for version in ["2.0", "3.0"] {
+        let path = directory
+            .path()
+            .join(format!("continuations-{version}.epub"));
+        fixture_with_titles(
+            &path,
+            version,
+            CHAPTER,
+            NOTES,
+            &[
+                None,
+                None,
+                Some("  第一章  "),
+                None,
+                Some("  "),
+                Some(" nUlL "),
+                Some("第二章"),
+                None,
+            ],
+        );
+        let toc = parser::extract_toc(&path).unwrap();
+        let english = toc
+            .iter()
+            .map(|entry| entry.display_label("continued"))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            english,
+            [
+                "Chapter 1",
+                "Chapter 1 (continued)",
+                "第一章",
+                "第一章 (continued)",
+                "第一章 (continued 2)",
+                "第一章 (continued 3)",
+                "第二章",
+                "第二章 (continued)",
+            ]
+        );
+        assert_eq!(toc[4].display_label("续"), "第一章 (续 2)");
+        assert_eq!(
+            toc.iter().map(|entry| entry.index).collect::<Vec<_>>(),
+            (0..8).collect::<Vec<_>>()
+        );
+    }
+}
 
 #[test]
 #[ignore = "Set FNINE_TEST_BOOKS to a directory of local EPUBs; reads without changing library data"]
@@ -604,6 +695,7 @@ fn browser_fixture() {
         })
         .collect::<String>();
     let chapter = CHAPTER.replace("</body>", &format!(r##"<p>Publisher<span class="math-super"><a id="z17" href="../notes.xhtml#bz17">17</a></span>.</p><p>Unlinked<sup><small>①</small></sup>.</p><ul><li>① The first unlinked note body.</li></ul><p>Repeated<sup>①</sup>.</p><ul><li>① A different unlinked note body.</li></ul>{paragraphs}</body>"##));
+    let chapter = chapter.replace("</body>", r##"<p>😀<a epub:type="noteref" href="../notes.xhtml#note%201">1</a><a epub:type="noteref" href="../notes.xhtml#note%201">1</a>.</p><p><a epub:type="noteref" href="../notes.xhtml#note%201">1</a> Paragraph-start note.</p></body>"##);
     let notes = NOTES.replace(
         "</aside>",
         &format!(
@@ -611,7 +703,19 @@ fn browser_fixture() {
             "Long note text for popup scrolling. ".repeat(300)
         ),
     ).replace("</body>", r##"<p class="zhusi"><a id="bz17" href="chapters/one.xhtml#z17">[17]</a> The actual publisher-styled note body.</p></body>"##);
-    fixture(std::path::Path::new(&destination), "3.0", &chapter, &notes);
+    fixture_with_titles(
+        std::path::Path::new(&destination),
+        "3.0",
+        &chapter,
+        &notes,
+        &[
+            Some("Actual chapter title"),
+            None,
+            Some(" null "),
+            Some("Next chapter"),
+            None,
+        ],
+    );
 }
 
 #[tokio::test]

@@ -19,6 +19,7 @@ upload_btn = "Upload"
 cancel = "Cancel"
 
 [reader]
+continued = "continued"
 prev_chapter = "Previous"
 next_chapter = "Next"
 toc = "Table of Contents"
