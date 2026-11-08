@@ -3,6 +3,7 @@
   const app = document.getElementById("reader-app");
   const content = document.getElementById("chapter-text");
   if (!app || !content) return;
+  history.scrollRestoration = "manual";
   const bookId = app.dataset.bookId;
   const chapter = Number(app.dataset.chapter);
   const initialPosition = Number(app.dataset.position) || 0;
@@ -14,11 +15,10 @@
   const annotateButton = document.getElementById("annotate-selection");
   const canonicalText = content.textContent;
   let restoring = true;
-  let progressTimer;
   let selectionRange;
   let noteTrigger;
-  let pendingProgress = null;
-  let saving = false;
+  const saveButton = document.getElementById("save-progress-btn");
+  let messageTimer;
   let annotations = [];
 
   content.querySelectorAll(".fn-ref").forEach(function (reference) {
@@ -37,10 +37,12 @@
     anchor.append(attached, reference);
   });
 
-  function message(failed) {
-    status.textContent = failed ? status.dataset.error : "";
+  function message(failed, saved = false) {
+    clearTimeout(messageTimer);
+    status.textContent = failed ? status.dataset.error : saved ? status.dataset.saved : "";
     status.classList.toggle("save-error", failed);
-    status.hidden = !failed;
+    status.hidden = !failed && !saved;
+    if (saved) messageTimer = setTimeout(function () { status.hidden = true; status.textContent = ""; }, 1800);
   }
 
   let sidebarOpen = !window.matchMedia("(max-width: 767px)").matches;
@@ -97,7 +99,7 @@
   noteDialog.addEventListener("close", function () { noteTrigger?.focus({ preventScroll: true }); });
 
   document.addEventListener("keydown", function (event) {
-    if (noteDialog.open || annotationDialog.open) return;
+    if (document.querySelector("dialog[open]")) return;
     if (event.key === "Escape" && sidebarOpen) { setSidebar(false, true); return; }
     if (event.target.closest("input, textarea, select, button, a, [contenteditable]") || event.altKey || event.ctrlKey || event.metaKey || window.getSelection()?.toString()) return;
     const selector = event.key === "ArrowRight" ? ".reader-nav a.btn-primary" : event.key === "ArrowLeft" ? ".reader-nav a.btn-secondary" : null;
@@ -169,45 +171,35 @@
     return { book_id: bookId, chapter: chapter, position: Math.max(0, Math.min(1, positionAtViewport())) };
   }
 
-  async function drainProgress() {
-    if (saving) return;
-    saving = true;
-    while (pendingProgress) {
-      const payload = pendingProgress;
-      pendingProgress = null;
-      try {
-        const response = await fetch("/api/progress", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), keepalive: true });
-        if (!response.ok) throw new Error("save failed");
-        message(false);
-      } catch (_) { message(true); }
-    }
-    saving = false;
-  }
-
-  function saveProgress() {
-    if (restoring || noteDialog.open || annotationDialog.open) return;
-    pendingProgress = progressPayload();
-    drainProgress();
-  }
-
-  window.addEventListener("scroll", function () {
-    if (restoring) return;
-    clearTimeout(progressTimer);
-    progressTimer = setTimeout(saveProgress, 500);
-  }, { passive: true });
-  document.addEventListener("visibilitychange", function () {
-    if (document.visibilityState === "hidden") { clearTimeout(progressTimer); saveProgress(); }
+  saveButton.addEventListener("click", async function () {
+    if (restoring || saveButton.disabled) return;
+    const payload = progressPayload();
+    saveButton.disabled = true;
+    try {
+      const response = await fetch("/api/progress", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (!response.ok) throw new Error("save failed");
+      message(false, true);
+    } catch (_) { message(true); }
+    finally { saveButton.disabled = false; }
   });
-  window.addEventListener("pagehide", saveProgress);
-  document.querySelectorAll("a").forEach(function (link) { link.addEventListener("click", saveProgress); });
+  document.getElementById("add-bookmark-btn").addEventListener("click", function () {
+    if (restoring) return;
+    document.dispatchEvent(new CustomEvent("fnine-add-bookmark", { detail: progressPayload() }));
+  });
 
   function restorePosition() {
+    window.scrollTo(0, 0);
     if (initialPosition > 0) {
       const range = rangeAt(Math.round(initialPosition * canonicalText.length));
       const bounds = range?.getClientRects()[0];
       if (bounds) window.scrollTo(0, window.scrollY + bounds.top - window.innerHeight * 0.3);
     }
-    requestAnimationFrame(function () { restoring = false; saveProgress(); });
+    const url = new URL(location.href);
+    if (url.searchParams.has("pos")) {
+      url.searchParams.delete("pos");
+      history.replaceState(null, "", url);
+    }
+    requestAnimationFrame(function () { restoring = false; saveButton.disabled = false; });
   }
 
   function renderHighlights() {
@@ -249,7 +241,7 @@
 
   let selectionTimer;
   document.addEventListener("selectionchange", function () {
-    if (annotationDialog.open || noteDialog.open) return;
+    if (document.querySelector("dialog[open]")) return;
     clearTimeout(selectionTimer);
     selectionTimer = setTimeout(function () {
       const range = selectedRange();
@@ -291,7 +283,7 @@
 
   async function initialize() {
     try {
-      const response = await fetch("/api/book/" + bookId + "/annotations");
+      const response = await fetch("/api/book/" + bookId + "/annotations?chapter=" + chapter);
       if (!response.ok) throw new Error("annotation load failed");
       annotations = await response.json();
       renderHighlights();

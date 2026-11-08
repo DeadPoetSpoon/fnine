@@ -61,12 +61,26 @@ impl From<Annotation> for AnnotationOutput {
 pub async fn list_annotations(
     State(state): State<AppState>,
     Path(book_id): Path<String>,
+    Query(query): Query<HashMap<String, String>>,
 ) -> Result<Json<Vec<AnnotationOutput>>, AppError> {
     let book = state.book(&book_id).await?;
     crate::epub::migration::upgrade(&state, &book).await?;
     let store = state.annotations_store(&book_id);
     let data = store.load().await?;
-    let list: Vec<AnnotationOutput> = data.annotations.into_iter().map(Into::into).collect();
+    let chapter = query
+        .get("chapter")
+        .map(|value| {
+            value
+                .parse::<u32>()
+                .map_err(|_| AppError::BadRequest("Invalid chapter".into()))
+        })
+        .transpose()?;
+    let list: Vec<AnnotationOutput> = data
+        .annotations
+        .into_iter()
+        .filter(|annotation| chapter.is_none_or(|chapter| annotation.chapter == chapter))
+        .map(Into::into)
+        .collect();
     Ok(Json(list))
 }
 
@@ -154,6 +168,8 @@ pub async fn delete_annotation(
     crate::validation::id(&aid)?;
     let lang = query.get("lang").map(|s| s.as_str()).unwrap_or("zh");
     let theme = query.get("theme").map(|s| s.as_str()).unwrap_or("light");
+    let page = crate::pagination::number(query.get("annotation_page"))?;
+    let bookmark_page = crate::pagination::number(query.get("bookmark_page"))?;
     let store = state.annotations_store(&book_id);
     let mut data = store.load().await?;
     if !data
@@ -167,7 +183,7 @@ pub async fn delete_annotation(
     store.save(&data).await?;
 
     Ok(Redirect::to(&format!(
-        "/book/{book_id}?lang={lang}&theme={theme}"
+        "/book/{book_id}?lang={lang}&theme={theme}&annotation_page={page}&bookmark_page={bookmark_page}&tab=annotations"
     )))
 }
 
@@ -201,39 +217,4 @@ pub async fn edit_annotation(
     let output = annotation.clone().into();
     store.save(&data).await?;
     Ok(Json(output))
-}
-
-pub async fn export_annotations(
-    State(state): State<AppState>,
-    Path(book_id): Path<String>,
-) -> Result<impl axum::response::IntoResponse, AppError> {
-    let book = state.book(&book_id).await?;
-    crate::epub::migration::upgrade(&state, &book).await?;
-    let data = state.annotations_store(&book_id).load().await?;
-    let mut output = format!("# {}\n\n{}\n", book.title, book.author);
-    for annotation in data.annotations {
-        output.push_str(&format!(
-            "\n## Chapter {}\n\n{}\n\n",
-            annotation.chapter + 1,
-            annotation.created_at.to_rfc3339()
-        ));
-        for line in annotation.selected_text.lines() {
-            output.push_str(&format!("> {line}\n"));
-        }
-        output.push_str(&format!(
-            "\n{}\n\nColor: {}\n",
-            annotation.note.as_deref().unwrap_or(""),
-            annotation.color
-        ));
-        if annotation.needs_review {
-            output.push_str("\nLocation needs review.\n");
-        }
-    }
-    Ok((
-        [
-            ("content-type", "text/markdown; charset=utf-8"),
-            ("content-disposition", "attachment; filename=annotations.md"),
-        ],
-        output,
-    ))
 }

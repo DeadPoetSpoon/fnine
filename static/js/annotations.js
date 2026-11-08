@@ -1,3 +1,12 @@
+document.querySelectorAll(".annotation-edit-toggle").forEach(function (button) {
+  button.addEventListener("click", function () {
+    const form = document.getElementById(button.getAttribute("aria-controls"));
+    form.hidden = !form.hidden;
+    button.setAttribute("aria-expanded", String(!form.hidden));
+    if (!form.hidden) form.elements.note.focus({ preventScroll: true });
+  });
+});
+
 document.querySelectorAll(".annotation-edit").forEach(function (form) {
   form.addEventListener("submit", async function (event) {
     event.preventDefault();

@@ -1,6 +1,7 @@
 use crate::cache::Cache;
 use crate::config::Config;
 use crate::db::annotations::AnnotationsData;
+use crate::db::bookmarks::BookmarksData;
 use crate::db::books::{Book, BooksData};
 use crate::db::fonts::FontsData;
 use crate::db::progress::ProgressData;
@@ -73,6 +74,7 @@ impl AppState {
             "covers",
             "fonts",
             "annotations",
+            "bookmarks",
             "staging",
             "imports",
             "deletions",
@@ -206,6 +208,14 @@ impl AppState {
     }
 
     pub async fn finish_delete(&self, id: &str) -> Result<(), AppError> {
+        remove_if_exists(
+            &self
+                .config
+                .data_dir
+                .join("bookmarks")
+                .join(format!("{id}.toml")),
+        )
+        .await?;
         let mut progress = self.progress.load().await?;
         progress.entries.remove(id);
         self.progress.save(&progress).await?;
@@ -256,6 +266,41 @@ impl AppState {
                 .join("annotations")
                 .join(format!("{book_id}.toml")),
         )
+    }
+
+    pub fn bookmarks_store(&self, book_id: &str) -> Store<BookmarksData> {
+        Store::new(
+            self.config
+                .data_dir
+                .join("bookmarks")
+                .join(format!("{book_id}.toml")),
+        )
+    }
+
+    pub async fn toc(&self, book_id: &str) -> Result<Vec<ChapterEntry>, AppError> {
+        if let Some(toc) = self.toc_cache.get(&book_id.to_string()) {
+            return Ok(toc);
+        }
+        let path = self.books_dir().join(format!("{book_id}.epub"));
+        let permit = self
+            .parsers
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|error| AppError::Internal(error.to_string()))?;
+        let toc = tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            crate::epub::parser::extract_toc(&path)
+        })
+        .await
+        .map_err(|error| AppError::Internal(error.to_string()))??;
+        let weight = toc
+            .iter()
+            .map(|entry| entry.label.len() + std::mem::size_of::<ChapterEntry>())
+            .sum();
+        self.toc_cache
+            .insert_weighted(book_id.to_string(), toc.clone(), weight);
+        Ok(toc)
     }
 
     // ── Cache-first read helpers ───────────────────────────────

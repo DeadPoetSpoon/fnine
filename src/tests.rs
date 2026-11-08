@@ -30,6 +30,17 @@ fn fixture_with_titles(
     notes: &str,
     titles: &[Option<&str>],
 ) {
+    fixture_with_parts(path, version, chapter, chapter, notes, titles);
+}
+
+fn fixture_with_parts(
+    path: &std::path::Path,
+    version: &str,
+    first: &str,
+    chapter: &str,
+    notes: &str,
+    titles: &[Option<&str>],
+) {
     let file = std::fs::File::create(path).unwrap();
     let mut archive = zip::ZipWriter::new(file);
     let options =
@@ -70,7 +81,7 @@ fn fixture_with_titles(
             r#"<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/package.opf" media-type="application/oebps-package+xml"/></rootfiles></container>"#,
         ),
         ("OEBPS/package.opf", opf.as_str()),
-        ("OEBPS/chapters/one.xhtml", chapter),
+        ("OEBPS/chapters/one.xhtml", first),
         ("OEBPS/notes.xhtml", notes),
         ("OEBPS/nav.xhtml", nav.as_str()),
         ("OEBPS/toc.ncx", ncx.as_str()),
@@ -122,8 +133,8 @@ fn names_untitled_spine_parts_as_numbered_continuations() {
         assert_eq!(
             english,
             [
-                "Chapter 1",
-                "Chapter 1 (continued)",
+                "Cover",
+                "Cover (continued)",
                 "第一章",
                 "第一章 (continued)",
                 "第一章 (continued 2)",
@@ -234,6 +245,7 @@ async fn setup() -> (tempfile::TempDir, AppState, std::fs::File, String) {
         file_size: 1,
         uploaded_at: chrono::Utc::now(),
         normalization_version: 2,
+        finished: false,
     });
     state.books.save(&data).await.unwrap();
     (directory, state, lock, id)
@@ -745,6 +757,23 @@ async fn locks_directory_and_preserves_corrupt_store() {
     assert_eq!(tokio::fs::read_to_string(&path).await.unwrap(), "[broken");
 }
 
+#[tokio::test]
+async fn store_saves_and_replaces_files_without_leaving_temporary_files() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = Store::<crate::db::settings::Settings>::new(directory.path().join("settings.toml"));
+    let mut settings = crate::db::settings::Settings::default();
+    store.save(&settings).await.unwrap();
+    assert_eq!(store.load().await.unwrap().font_size, settings.font_size);
+    settings.font_size = 24;
+    store.save(&settings).await.unwrap();
+    assert_eq!(store.load().await.unwrap().font_size, 24);
+    let files = std::fs::read_dir(directory.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect::<Vec<_>>();
+    assert_eq!(files, vec![std::ffi::OsString::from("settings.toml")]);
+}
+
 #[test]
 fn keeps_duplicate_labels_distinct_and_bounds_long_notes() {
     let directory = tempfile::tempdir().unwrap();
@@ -808,6 +837,28 @@ async fn settings_validation_and_library_filters() {
         serde_json::json!({"book_id":id,"chapter":0,"position":1.0}),
     )
     .await;
+    let finished = body(
+        request(
+            &state,
+            "GET",
+            "/?status=finished&lang=en",
+            serde_json::Value::Null,
+        )
+        .await,
+    )
+    .await;
+    assert!(!finished.contains("class=\"book-card\""));
+    assert_eq!(
+        request(
+            &state,
+            "POST",
+            &format!("/api/book/{id}/status"),
+            serde_json::json!({"finished":true})
+        )
+        .await
+        .status(),
+        StatusCode::OK
+    );
     let finished = body(
         request(
             &state,
@@ -948,6 +999,17 @@ async fn deletes_associated_state_and_recovers_journal() {
         request(
             &state,
             "POST",
+            &format!("/api/book/{id}/bookmarks"),
+            serde_json::json!({"chapter":0,"position":0.5})
+        )
+        .await
+        .status(),
+        StatusCode::CREATED
+    );
+    assert_eq!(
+        request(
+            &state,
+            "POST",
             "/api/progress",
             serde_json::json!({"book_id":id,"chapter":0,"position":0.5})
         )
@@ -967,6 +1029,14 @@ async fn deletes_associated_state_and_recovers_journal() {
         StatusCode::SEE_OTHER
     );
     assert!(!state.books_dir().join(format!("{id}.epub")).exists());
+    assert!(
+        !state
+            .config
+            .data_dir
+            .join("bookmarks")
+            .join(format!("{id}.toml"))
+            .exists()
+    );
     assert!(
         !state
             .progress
@@ -1011,7 +1081,7 @@ async fn rejects_cross_origin_and_large_json() {
 }
 
 #[tokio::test]
-async fn exports_and_edits_annotations() {
+async fn edits_annotations_and_removes_export() {
     let (_directory, state, _lock, id) = setup().await;
     let response = request(&state, "POST", &format!("/api/book/{id}/annotations"), serde_json::json!({"chapter":0,"selected_text":"First A","note":"original","position_start":0.0,"position_end":0.1})).await;
     let annotation: serde_json::Value = serde_json::from_str(&body(response).await).unwrap();
@@ -1034,6 +1104,452 @@ async fn exports_and_edits_annotations() {
         serde_json::Value::Null,
     )
     .await;
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let response = request(
+        &state,
+        "GET",
+        &format!("/api/book/{id}/annotations?chapter=0"),
+        serde_json::Value::Null,
+    )
+    .await;
     assert!(body(response).await.contains("updated note"));
+}
+
+#[test]
+fn paginates_without_losing_items_and_bounds_pages() {
+    let first = crate::pagination::Page::new((0..23).collect::<Vec<_>>(), 1);
+    assert_eq!(first.items, (0..10).collect::<Vec<_>>());
+    assert_eq!(
+        (first.page, first.pages, first.total, first.page_size),
+        (1, 3, 23, 10)
+    );
+    let last = crate::pagination::Page::new((0..23).collect::<Vec<_>>(), usize::MAX);
+    assert_eq!(last.items, vec![20, 21, 22]);
+    assert_eq!(last.page, 3);
+    let empty = crate::pagination::Page::new(Vec::<usize>::new(), 4);
+    assert!(empty.items.is_empty());
+    assert_eq!((empty.page, empty.pages), (1, 1));
+    for value in ["0", "-1", "abc", "184467440737095516160"] {
+        assert!(crate::pagination::number(Some(&value.to_string())).is_err());
+    }
+}
+
+#[test]
+fn legacy_records_keep_resume_positions_without_inferred_completion() {
+    let book: crate::db::books::BooksData = toml::from_str(
+        r#"
+[[books]]
+id = "00000000-0000-4000-8000-000000000000"
+title = "Legacy"
+author = "Author"
+chapter_count = 1
+file_name = "book.epub"
+file_size = 100
+uploaded_at = "2026-01-01T00:00:00Z"
+"#,
+    )
+    .unwrap();
+    assert!(!book.books[0].finished);
+    let progress: crate::db::progress::ProgressEntry = toml::from_str(
+        r#"
+book_id = "00000000-0000-4000-8000-000000000000"
+chapter = 0
+position = 0.4
+updated_at = "2026-01-01T00:00:00Z"
+last_chapter = 9
+last_position = 1.0
+last_updated_at = "2026-01-01T00:00:00Z"
+"#,
+    )
+    .unwrap();
+    assert_eq!(progress.position, 0.4);
+    assert_eq!(progress.chapter, 0);
+}
+
+#[test]
+fn skips_only_empty_untitled_first_parts_without_renumbering() {
+    let directory = tempfile::tempdir().unwrap();
+    for version in ["2.0", "3.0"] {
+        let path = directory.path().join(format!("empty-cover-{version}.epub"));
+        fixture_with_parts(
+            &path,
+            version,
+            "<html><head><title>Not content</title></head><body> </body></html>",
+            CHAPTER,
+            NOTES,
+            &[None, Some("正文"), None],
+        );
+        let toc = parser::extract_toc(&path).unwrap();
+        assert_eq!(
+            toc.iter().map(|entry| entry.index).collect::<Vec<_>>(),
+            vec![1, 2]
+        );
+        assert_eq!(toc[0].label, "正文");
+        assert_eq!(toc[1].display_label("续"), "正文 (续)");
+        assert!(
+            parser::read_chapter(&path, 1)
+                .unwrap()
+                .text()
+                .contains("First A")
+        );
+        fixture_with_titles(
+            &path,
+            version,
+            "<html><body></body></html>",
+            NOTES,
+            &[Some("Named"), Some("Next")],
+        );
+        assert_eq!(parser::extract_toc(&path).unwrap().len(), 2);
+        fixture_with_titles(&path, version, "<html><body></body></html>", NOTES, &[None]);
+        assert!(parser::extract_toc(&path).unwrap().is_empty());
+    }
+}
+
+#[tokio::test]
+async fn manual_progress_moves_backwards_and_completion_stays_independent() {
+    let (_directory, state, _lock, id) = setup().await;
+    let progress_url = "/api/progress";
+    for position in [1.0, 0.3] {
+        assert_eq!(
+            request(
+                &state,
+                "POST",
+                progress_url,
+                serde_json::json!({"book_id":id,"chapter":0,"position":position})
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+    }
+    let saved = state.load_progress().await.unwrap().entries[&id].clone();
+    assert_eq!(saved.position, 0.3);
+    assert!(!state.book(&id).await.unwrap().finished);
+    for finished in [true, false] {
+        assert_eq!(
+            request(
+                &state,
+                "POST",
+                &format!("/api/book/{id}/status"),
+                serde_json::json!({"finished":finished})
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+        assert_eq!(state.book(&id).await.unwrap().finished, finished);
+        let progress = state.load_progress().await.unwrap();
+        assert_eq!(progress.entries[&id].position, saved.position);
+        assert_eq!(progress.entries[&id].updated_at, saved.updated_at);
+    }
+    request(
+        &state,
+        "POST",
+        &format!("/api/book/{id}/status"),
+        serde_json::json!({"finished":true}),
+    )
+    .await;
+    request(
+        &state,
+        "POST",
+        progress_url,
+        serde_json::json!({"book_id":id,"chapter":0,"position":0.1}),
+    )
+    .await;
+    assert!(state.book(&id).await.unwrap().finished);
+    let reader = body(
+        request(
+            &state,
+            "GET",
+            &format!("/book/{id}/read/0"),
+            serde_json::Value::Null,
+        )
+        .await,
+    )
+    .await;
+    assert!(reader.contains("data-position=\"0.1\""));
+    assert!(!reader.contains("jump-last-btn"));
+}
+
+#[tokio::test]
+async fn bookmarks_are_independent_paginated_validated_and_editable() {
+    let (_directory, state, _lock, id) = setup().await;
+    let url = format!("/api/book/{id}/bookmarks");
+    let mut tasks = Vec::new();
+    for position in 0..12 {
+        let state = state.clone();
+        let url = url.clone();
+        tasks.push(tokio::spawn(async move {
+            request(
+                &state,
+                "POST",
+                &url,
+                serde_json::json!({"chapter":0,"position":position as f64 / 12.0,"name":" "}),
+            )
+            .await
+            .status()
+        }));
+    }
+    for task in tasks {
+        assert_eq!(task.await.unwrap(), StatusCode::CREATED);
+    }
+    assert!(
+        !state
+            .load_progress()
+            .await
+            .unwrap()
+            .entries
+            .contains_key(&id)
+    );
+    let first: serde_json::Value = serde_json::from_str(
+        &body(request(&state, "GET", &url, serde_json::Value::Null).await).await,
+    )
+    .unwrap();
+    assert_eq!(first["total"], 12);
+    assert_eq!(first["items"].as_array().unwrap().len(), 10);
+    assert_eq!(first["pages"], 2);
+    let second: serde_json::Value = serde_json::from_str(
+        &body(
+            request(
+                &state,
+                "GET",
+                &format!("{url}?page=2"),
+                serde_json::Value::Null,
+            )
+            .await,
+        )
+        .await,
+    )
+    .unwrap();
+    assert_eq!(second["items"].as_array().unwrap().len(), 2);
+    let bookmark = &first["items"][0];
+    assert!(
+        bookmark["name"]
+            .as_str()
+            .unwrap()
+            .contains("Actual chapter title · ")
+    );
+    let edit_url = format!("{url}/{}", bookmark["id"].as_str().unwrap());
+    assert_eq!(
+        request(
+            &state,
+            "PATCH",
+            &edit_url,
+            serde_json::json!({"name":"  中文书签 😀  "})
+        )
+        .await
+        .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        state
+            .bookmarks_store(&id)
+            .load()
+            .await
+            .unwrap()
+            .bookmarks
+            .iter()
+            .find(|entry| entry.id == bookmark["id"].as_str().unwrap())
+            .unwrap()
+            .name,
+        "中文书签 😀"
+    );
+    for input in [
+        serde_json::json!({"chapter":3,"position":0.2}),
+        serde_json::json!({"chapter":0,"position":1.1}),
+        serde_json::json!({"chapter":0,"position":0.1,"name":"长".repeat(201)}),
+    ] {
+        assert_eq!(
+            request(&state, "POST", &url, input).await.status(),
+            StatusCode::BAD_REQUEST
+        );
+    }
+    assert_eq!(
+        request(
+            &state,
+            "GET",
+            &format!("{url}?page=0"),
+            serde_json::Value::Null
+        )
+        .await
+        .status(),
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        request(
+            &state,
+            "PATCH",
+            &edit_url,
+            serde_json::json!({"name":"x".repeat(201)})
+        )
+        .await
+        .status(),
+        StatusCode::BAD_REQUEST
+    );
+    let missing = format!("{url}/{}", uuid::Uuid::new_v4());
+    assert_eq!(
+        request(&state, "DELETE", &missing, serde_json::Value::Null)
+            .await
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        request(&state, "DELETE", &edit_url, serde_json::Value::Null)
+            .await
+            .status(),
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        request(&state, "DELETE", &edit_url, serde_json::Value::Null)
+            .await
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+    assert!(
+        !state
+            .load_progress()
+            .await
+            .unwrap()
+            .entries
+            .contains_key(&id)
+    );
+}
+
+#[tokio::test]
+async fn paginates_annotations_and_preserves_other_page_preferences() {
+    let (_directory, state, _lock, id) = setup().await;
+    for index in 0..12 {
+        request(&state, "POST", &format!("/api/book/{id}/annotations"), serde_json::json!({"chapter":0,"selected_text":format!("quote {index}"),"position_start":0.1,"position_end":0.2})).await;
+    }
+    let html = body(
+        request(
+            &state,
+            "GET",
+            &format!("/book/{id}?annotation_page=1&bookmark_page=2&lang=en&theme=dark"),
+            serde_json::Value::Null,
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(html.matches("class=\"annotation-item\"").count(), 10);
+    assert!(html.contains("annotation_page=2&bookmark_page=2&lang=en&theme=dark"));
+    let html = body(
+        request(
+            &state,
+            "GET",
+            &format!("/book/{id}?annotation_page=2"),
+            serde_json::Value::Null,
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(html.matches("class=\"annotation-item\"").count(), 2);
+    assert_eq!(
+        request(
+            &state,
+            "GET",
+            &format!("/book/{id}?annotation_page=-1"),
+            serde_json::Value::Null
+        )
+        .await
+        .status(),
+        StatusCode::BAD_REQUEST
+    );
+    let annotations: serde_json::Value = serde_json::from_str(
+        &body(
+            request(
+                &state,
+                "GET",
+                &format!("/api/book/{id}/annotations?chapter=1"),
+                serde_json::Value::Null,
+            )
+            .await,
+        )
+        .await,
+    )
+    .unwrap();
+    assert!(annotations.as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn reader_localizes_covers_and_redirects_skipped_first_parts() {
+    let (_directory, state, _lock, id) = setup().await;
+    let path = state.books_dir().join(format!("{id}.epub"));
+    fixture_with_parts(&path, "3.0", CHAPTER, CHAPTER, NOTES, &[None, Some("正文")]);
+    let mut books = state.books.load().await.unwrap();
+    books.books[0].chapter_count = 2;
+    state.books.save(&books).await.unwrap();
+    state.invalidate_books_cache();
+    for (lang, title) in [("zh", "封面"), ("en", "Cover")] {
+        let html = body(
+            request(
+                &state,
+                "GET",
+                &format!("/book/{id}/read/0?lang={lang}"),
+                serde_json::Value::Null,
+            )
+            .await,
+        )
+        .await;
+        assert!(html.contains(&format!("class=\"chapter-title\">{title}</span>")));
+    }
+    fixture_with_parts(
+        &path,
+        "3.0",
+        "<html><body></body></html>",
+        CHAPTER,
+        NOTES,
+        &[None, Some("正文")],
+    );
+    state.toc_cache.invalidate(&id);
+    let response = request(
+        &state,
+        "GET",
+        &format!("/book/{id}/read/0?pos=0.8&lang=en"),
+        serde_json::Value::Null,
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert!(
+        response.headers()["location"]
+            .to_str()
+            .unwrap()
+            .contains("/read/1?pos=0&lang=en")
+    );
+    let html = body(
+        request(
+            &state,
+            "GET",
+            &format!("/book/{id}/read/1?lang=en"),
+            serde_json::Value::Null,
+        )
+        .await,
+    )
+    .await;
+    assert!(html.contains("1 / 1"));
+    assert!(!html.contains("class=\"toc-item \""));
+    assert_eq!(
+        request(
+            &state,
+            "POST",
+            &format!("/api/book/{id}/bookmarks"),
+            serde_json::json!({"chapter":0,"position":0.5})
+        )
+        .await
+        .status(),
+        StatusCode::BAD_REQUEST
+    );
+    fixture_with_titles(&path, "3.0", "<html><body></body></html>", NOTES, &[None]);
+    state.toc_cache.invalidate(&id);
+    let html = body(
+        request(
+            &state,
+            "GET",
+            &format!("/book/{id}/read/0?lang=en"),
+            serde_json::Value::Null,
+        )
+        .await,
+    )
+    .await;
+    assert!(html.contains("no readable content"));
 }

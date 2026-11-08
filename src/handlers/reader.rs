@@ -3,7 +3,7 @@ use axum::extract::{Path, Query, State};
 use axum::response::{IntoResponse, Redirect, Response};
 use std::collections::HashMap;
 
-use crate::epub::parser::{ChapterContent, ChapterEntry, extract_toc};
+use crate::epub::parser::{ChapterContent, ChapterEntry};
 use crate::error::AppError;
 use crate::i18n::translations::Translations;
 use crate::state::AppState;
@@ -20,8 +20,10 @@ struct ReaderTemplate<'a> {
     toc: Vec<ChapterEntry>,
     chapter_count: usize,
     initial_position: f64,
-    last_chapter: usize,
-    last_position: f64,
+    chapter_number: usize,
+    previous_chapter: Option<usize>,
+    next_chapter: Option<usize>,
+    finished: bool,
     font_size: u32,
     custom_font: String,
     t: &'a Translations,
@@ -60,44 +62,36 @@ pub async fn read_chapter_handler(
     let book = state.book(&id).await?;
     crate::epub::migration::upgrade(&state, &book).await?;
 
-    let epub_path = state.books_dir().join(format!("{}.epub", book.id));
-
-    let mut toc = if let Some(toc) = state.toc_cache.get(&id) {
-        toc
-    } else {
-        let path = epub_path.clone();
-        let permit = state
-            .parsers
-            .clone()
-            .acquire_owned()
-            .await
-            .map_err(|error| AppError::Internal(error.to_string()))?;
-        let toc = tokio::task::spawn_blocking(move || {
-            let _permit = permit;
-            extract_toc(&path)
-        })
-        .await
-        .map_err(|error| AppError::Internal(error.to_string()))??;
-        let weight = toc
-            .iter()
-            .map(|entry| entry.label.len() + std::mem::size_of::<ChapterEntry>())
-            .sum();
-        state
-            .toc_cache
-            .insert_weighted(id.clone(), toc.clone(), weight);
-        toc
-    };
+    let mut toc = state.toc(&id).await?;
     let chapter_count = toc.len();
-
-    if chapter >= chapter_count {
-        return Err(AppError::NotFound("Chapter not found".into()));
+    let lang = query.get("lang").map(|s| s.as_str()).unwrap_or("zh");
+    let theme = query.get("theme").map(|s| s.as_str()).unwrap_or("light");
+    let t = Translations::load(lang);
+    if toc.is_empty() {
+        return Ok(axum::response::Html(format!(
+            "<html lang=\"{}\"><meta charset=\"UTF-8\"><p>{}</p></html>",
+            t.lang(),
+            t.get("reader.no_content")
+        ))
+        .into_response());
     }
+    if chapter == 0 && toc[0].index != 0 {
+        return Ok(Redirect::to(&format!(
+            "/book/{id}/read/{}?pos=0&lang={lang}&theme={theme}",
+            toc[0].index
+        ))
+        .into_response());
+    }
+    let Some(ordinal) = toc.iter().position(|entry| entry.index == chapter) else {
+        return Err(AppError::NotFound("Chapter not found".into()));
+    };
+    let previous_chapter = ordinal.checked_sub(1).map(|index| toc[index].index);
+    let next_chapter = toc.get(ordinal + 1).map(|entry| entry.index);
 
     let content = state.chapter(&id, chapter).await?;
 
     let progress = state.load_progress().await?;
 
-    // Use explicit pos parameter if provided (jump-to-last), else fall back to progress
     let initial_position = if let Some(pos_str) = query.get("pos") {
         let position = pos_str
             .parse::<f64>()
@@ -113,24 +107,14 @@ pub async fn read_chapter_handler(
             .unwrap_or(0.0)
     };
 
-    let (last_chapter, last_position) = progress
-        .entries
-        .get(&id)
-        .map(|e| (e.last_chapter as usize, e.last_position))
-        .unwrap_or((0, 0.0));
-
-    let lang = query.get("lang").map(|s| s.as_str()).unwrap_or("zh");
-    let theme = query
-        .get("theme")
-        .map(|s| s.as_str())
-        .filter(|s| !s.is_empty())
-        .unwrap_or("light");
-    let t = Translations::load(lang);
     let continued = t.get("reader.continued");
     for entry in &mut toc {
+        if entry.is_cover {
+            entry.label = t.get("reader.cover");
+        }
         entry.label = entry.display_label(&continued);
     }
-    let label = toc[chapter].label.clone();
+    let label = toc[ordinal].label.clone();
 
     let settings = state.load_settings().await?;
     let custom_font = if settings.font_family.is_empty()
@@ -151,8 +135,10 @@ pub async fn read_chapter_handler(
         toc,
         chapter_count,
         initial_position,
-        last_chapter,
-        last_position,
+        chapter_number: ordinal + 1,
+        previous_chapter,
+        next_chapter,
+        finished: book.finished,
         font_size: settings.font_size.clamp(12, 32),
         custom_font,
         t: &t,

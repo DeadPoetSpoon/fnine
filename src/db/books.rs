@@ -12,6 +12,8 @@ pub struct Book {
     pub file_name: String, // Original filename
     pub file_size: u64,
     pub uploaded_at: DateTime<Utc>,
+    #[serde(default)]
+    pub finished: bool,
     #[serde(default = "legacy_version")]
     pub normalization_version: u32,
 }

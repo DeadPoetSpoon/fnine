@@ -18,7 +18,7 @@
             <div class="meta-item"><span class="meta-label">{{ t.get("book.uploaded") }}</span><span class="meta-value">{{ book.uploaded_at }}</span></div>
         </div>
         <div class="book-actions">
-            <a href="/book/{{ book.id }}/annotations/export" class="btn btn-secondary">{{ t.get("annotation.export") }}</a>
+            <button type="button" class="btn btn-secondary" data-book-id="{{ book.id }}" data-book-status="{% if book.finished %}false{% else %}true{% endif %}" {% if !book.finished %}data-confirm="{{ t.get("book.finish_confirm") }}"{% endif %}>{% if book.finished %}{{ t.get("book.mark_reading") }}{% else %}{{ t.get("book.mark_finished") }}{% endif %}</button><span class="status-message" role="status" data-error="{{ t.get("reader.save_failed") }}"></span>
             <a href="/book/{{ book.id }}/read?lang={{ t.lang() }}&theme={{ theme }}" class="btn btn-primary btn-lg">📖 {{ t.get("book.start_reading") }}</a>
             <a href="/book/{{ book.id }}/download" class="btn btn-secondary btn-lg" download>⬇ {{ t.get("book.download") }}</a>
             <form action="/book/{{ book.id }}/delete?lang={{ t.lang() }}&theme={{ theme }}" method="post" onsubmit="return confirm('{{ t.get("book.delete_confirm") }}')" style="display: inline">
@@ -28,26 +28,46 @@
     </div>
 </div>
 
-{% if !annotations.is_empty() %}
-<section class="annotations-section">
-    <h2>{{ t.get("annotation.title") }}</h2>
+<div class="annotations-section" id="book-entries">
+    <div class="entry-tabs" role="tablist" aria-label="{{ book.title }}">
+        <button type="button" id="book-bookmarks-tab" role="tab" aria-controls="bookmarks-section" aria-selected="{% if annotations_active %}false{% else %}true{% endif %}" tabindex="{% if annotations_active %}-1{% else %}0{% endif %}" data-tab="bookmarks">{{ t.get("bookmark.title") }}</button>
+        <button type="button" id="book-annotations-tab" role="tab" aria-controls="book-annotations" aria-selected="{% if annotations_active %}true{% else %}false{% endif %}" tabindex="{% if annotations_active %}0{% else %}-1{% endif %}" data-tab="annotations">{{ t.get("annotation.title") }}</button>
+    </div>
+    <section id="bookmarks-section" role="tabpanel" aria-labelledby="book-bookmarks-tab" tabindex="0" {% if annotations_active %}hidden{% endif %}>{% let bookmark_book_id = book.id %}{% include "components/bookmarks.html" %}</section>
+    <section id="book-annotations" role="tabpanel" aria-labelledby="book-annotations-tab" tabindex="0" {% if !annotations_active %}hidden{% endif %}>
+    {% if annotations.total > 0 %}
+    <nav class="pagination" aria-label="{{ t.get("annotation.title") }}">
+        {% if annotations.page > 1 %}<a class="btn-icon action-icon" aria-label="{{ t.get("pagination.previous") }}" title="{{ t.get("pagination.previous") }}" href="?annotation_page={{ annotations.page - 1 }}&bookmark_page={{ bookmark_page }}&lang={{ t.lang() }}&theme={{ theme }}&tab=annotations"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg></a>{% endif %}
+        <span>{{ annotations.page }} / {{ annotations.pages }} · {{ t.get("pagination.total") }} {{ annotations.total }}</span>
+        {% if annotations.page < annotations.pages %}<a class="btn-icon action-icon" aria-label="{{ t.get("pagination.next") }}" title="{{ t.get("pagination.next") }}" href="?annotation_page={{ annotations.page + 1 }}&bookmark_page={{ bookmark_page }}&lang={{ t.lang() }}&theme={{ theme }}&tab=annotations"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>{% endif %}
+    </nav>
     <div class="annotations-list">
-        {% for a in annotations %}
+        {% for a in annotations.items %}
         <div class="annotation-item">
             <a class="annotation-body" href="/book/{{ book.id }}/read/{{ a.chapter }}?{% if !a.needs_review %}pos={{ a.position_start }}&{% endif %}lang={{ t.lang() }}&theme={{ theme }}" title="{{ t.get("annotation.jump_to") }}">
                 <blockquote class="annotation-quote">{{ a.selected_text }}</blockquote>
                 {% if a.note.is_some() %}<p class="annotation-note">💬 {{ a.note.as_ref().unwrap() }}</p>{% endif %}
-                <span class="annotation-meta">{{ t.get("annotation.chapter") }} {{ a.chapter + 1 }} · {{ a.created_at }}</span>
                 {% if a.needs_review %}<p>{{ t.get("annotation.review") }}</p>{% endif %}
             </a>
-            <details><summary>{{ t.get("annotation.edit") }}</summary><form class="annotation-edit" data-url="/api/book/{{ book.id }}/annotations/{{ a.id }}"><label>{{ t.get("annotation.placeholder") }}<textarea name="note" maxlength="16384">{% if let Some(note) = a.note %}{{ note }}{% endif %}</textarea></label><label>{{ t.get("annotation.color") }}<select name="color"><option value="#ffee77" {% if a.color == "#ffee77" %}selected{% endif %}>{{ t.get("annotation.yellow") }}</option><option value="#a8e6a3" {% if a.color == "#a8e6a3" %}selected{% endif %}>{{ t.get("annotation.green") }}</option><option value="#a6d8ff" {% if a.color == "#a6d8ff" %}selected{% endif %}>{{ t.get("annotation.blue") }}</option><option value="#ffb3c6" {% if a.color == "#ffb3c6" %}selected{% endif %}>{{ t.get("annotation.pink") }}</option></select></label><button class="btn btn-secondary">{{ t.get("settings.save") }}</button><span role="status" data-error="{{ t.get("reader.save_failed") }}"></span></form></details>
-            <form action="/api/book/{{ book.id }}/annotations/{{ a.id }}?lang={{ t.lang() }}&theme={{ theme }}" method="post" class="annotation-delete-form">
-                <button type="submit" class="btn-icon" title="{{ t.get("book.delete") }}">✕</button>
+            <div class="entry-footer annotation-footer">
+            <span class="annotation-meta" title="{{ t.get("annotation.chapter") }} {{ a.chapter + 1 }} · {{ a.created_at }}">{{ t.get("annotation.chapter") }} {{ a.chapter + 1 }} · {{ a.created_at }}</span>
+            <button type="button" class="btn-icon action-icon annotation-edit-toggle" aria-label="{{ t.get("annotation.edit") }}" title="{{ t.get("annotation.edit") }}" aria-expanded="false" aria-controls="annotation-edit-{{ a.id }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 3 5 5-12 12H4v-5L16 3ZM14 5l5 5"/></svg></button>
+            <form action="/api/book/{{ book.id }}/annotations/{{ a.id }}?lang={{ t.lang() }}&theme={{ theme }}&annotation_page={{ annotations.page }}&bookmark_page={{ bookmark_page }}" method="post" class="annotation-delete-form">
+                <button type="submit" class="btn-icon action-icon action-delete" aria-label="{{ t.get("book.delete") }}" title="{{ t.get("book.delete") }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
             </form>
+            </div>
+            <form id="annotation-edit-{{ a.id }}" class="annotation-edit" data-url="/api/book/{{ book.id }}/annotations/{{ a.id }}" hidden><label>{{ t.get("annotation.placeholder") }}<textarea name="note" maxlength="16384">{% if let Some(note) = a.note %}{{ note }}{% endif %}</textarea></label><label>{{ t.get("annotation.color") }}<select name="color"><option value="#ffee77" {% if a.color == "#ffee77" %}selected{% endif %}>{{ t.get("annotation.yellow") }}</option><option value="#a8e6a3" {% if a.color == "#a8e6a3" %}selected{% endif %}>{{ t.get("annotation.green") }}</option><option value="#a6d8ff" {% if a.color == "#a6d8ff" %}selected{% endif %}>{{ t.get("annotation.blue") }}</option><option value="#ffb3c6" {% if a.color == "#ffb3c6" %}selected{% endif %}>{{ t.get("annotation.pink") }}</option></select></label><button class="btn btn-secondary">{{ t.get("settings.save") }}</button><span role="status" data-error="{{ t.get("reader.save_failed") }}"></span></form>
         </div>
         {% endfor %}
     </div>
-</section>
-{% endif %}
+    {% else %}
+    <p class="entry-empty">{{ t.get("annotation.empty") }}</p>
+    {% endif %}
+    </section>
+</div>
+<script src="/static/js/book-detail.js"></script>
 <script src="/static/js/annotations.js"></script>
+{% include "components/bookmark_dialog.html" %}
+<script src="/static/js/bookmarks.js"></script>
+<script src="/static/js/book-status.js"></script>
 {% endblock %}

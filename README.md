@@ -7,10 +7,12 @@ A self-hosted EPUB reading service written in Rust. Upload, manage, and read you
 - **EPUB Upload** — Supports EPUB 2 and EPUB 3 formats. Metadata (title, author, cover) is extracted automatically.
 - **Online Reader** — Clean chapter-by-chapter reading experience with a built-in table of contents sidebar. Untitled spine parts inherit the previous chapter's title with numbered, localized continuation labels.
 - **Publisher Endnotes** — Compact superscript markers stay attached to their preceding text. Select a marker to open its actual text in an accessible popup, including separate note documents, CSS-styled superscripts, and locally grouped circled-number notes without links.
-- **Reading Progress** — Scroll position is saved automatically so you can resume where you left off.
+- **Manual Reading Progress** — Select the pushpin to save your current position, or the adjacent jump icon to restore the latest saved position. The latest manual save wins across devices. Scrolling, switching chapters, and leaving the page never save progress.
+- **Bookmarks** — Select the star to save a named location, defaulting to the chapter title and chapter percentage. Manage names and deletions in book details; the reader's paginated list shows bookmark links only.
 - **Annotations & Notes** — Highlight text, choose a color, and attach personal notes to any passage.
 - **Library Controls** — Continue reading, sort by title/author/upload/last-read, and filter unread, reading, or finished books.
-- **Annotation Editing & Export** — Edit notes/colors and download your annotations as Markdown.
+- **Annotation Editing** — Edit notes/colors in a paginated list with compact mobile controls.
+- **Manual Completion** — Confirm that a book is finished, or undo that status, independently of its saved reading position.
 - **Multi-language** — English and Chinese (中文) UI. Easy to add more.
 - **Themes** — Light, dark, and sepia reading themes; saved language/theme settings apply by default.
 - **Custom Fonts** — Upload your own `.ttf` or `.woff2` font files for the reader.
@@ -58,9 +60,13 @@ Fnine is configured via environment variables:
 
 ## Reading and Storage Guarantees
 
+Version 0.8.0 keeps existing resume positions and removes automatic progress saving and the farthest-position shortcut. Previously inferred finished states must be confirmed manually. Bookmarks and annotations do not overwrite saved progress. Lists show 10 items per page; bookmarks and annotations have independent page controls. An untitled first spine item is named “Cover” if it contains readable text, otherwise it is skipped without changing stored chapter indices. Markdown note export has been removed.
+
 Fnine is a **text-first** reader: paragraphs, entities, Unicode, navigation labels, and note text are supported. Publisher CSS, illustrations, equations, and rich note formatting are not reproduced. Broken note targets show an explicit unavailable message; Fnine never retrieves external note URLs or renders uploaded HTML directly.
 
 Only **one process** may use a data directory. Requests coordinate TOML mutations with cache access; saves use unique, synced temporary files and atomic replacement. Import/deletion journals are recovered at startup. This is not a distributed database or a promise of multi-file transactional snapshots.
+
+On Unix, saves also sync the parent directory after replacement. Windows keeps file syncing and atomic replacement but skips this Unix directory operation, which otherwise causes saving to return an access-denied error.
 
 Older books migrate on first reading. Original metadata/progress/annotations are backed up under `data/backups/`; uniquely located annotations are reattached, ambiguous annotations remain available with a review warning. A progress location that cannot be mapped safely resumes at the beginning of that chapter. Existing font filenames are migrated into an inventory with generated IDs.
 
@@ -155,6 +161,7 @@ fnine/
 │   ├── deletions/           # Recoverable deletion journals
 │   ├── backups/             # Legacy normalization backups
 │   ├── annotations/         # Per-book annotation TOML files
+│   ├── bookmarks/           # Per-book bookmark TOML files
 │   ├── books.toml           # Book metadata index
 │   ├── progress.toml        # Reading progress per book
 │   └── settings.toml        # User settings
@@ -196,13 +203,21 @@ fnine/
 | `POST` | `/settings`                           | Save settings              |
 | `POST` | `/settings/fonts`                     | Upload a font file         |
 | `POST` | `/settings/fonts/delete`              | Delete a font file         |
-| `POST` | `/api/progress`                       | Save reading progress      |
+| `POST` | `/api/progress`                       | Manually save reading progress |
+| `POST` | `/api/book/{id}/status`               | Set manual finished status |
+| `GET`  | `/api/book/{id}/bookmarks?page=1`      | Bookmarks, 10 per page      |
+| `POST` | `/api/book/{id}/bookmarks`             | Add a bookmark             |
+| `PATCH` | `/api/book/{id}/bookmarks/{bid}`      | Rename a bookmark          |
+| `DELETE` | `/api/book/{id}/bookmarks/{bid}`     | Delete a bookmark          |
 | `GET`  | `/api/recent`                          | Last-read book (JSON)       |
-| `GET`  | `/api/book/{id}/annotations`          | List annotations           |
+| `GET`  | `/api/book/{id}/annotations`          | List annotations; optional `chapter` filter |
 | `POST` | `/api/book/{id}/annotations`          | Create annotation          |
 | `POST` | `/api/book/{id}/annotations/{aid}`    | Delete annotation          |
 | `PATCH` | `/api/book/{id}/annotations/{aid}`   | Edit note and highlight color |
-| `GET` | `/book/{id}/annotations/export`       | Download Markdown annotations |
+
+`POST /api/progress` accepts `{ "book_id": "UUID", "chapter": 0, "position": 0.5 }`; chapter indices are the original zero-based EPUB spine indices and positions are normalized UTF-16 text offsets. `POST /api/book/{id}/status` accepts `{ "finished": true }` or `false` and does not move the reading position.
+
+Bookmark creation accepts `{ "chapter": 0, "position": 0.5, "name": "Optional name" }`; renaming accepts `{ "name": "New name" }`. Empty names use the localized chapter title and chapter percentage. Names allow up to 200 characters. Bookmark queries return `{ "items": [], "page": 1, "page_size": 10, "total": 0, "pages": 1 }`. Book details use `annotation_page` and `bookmark_page`; pages start at 1 and requests beyond the last page fall back to the last valid page.
 
 ## License
 

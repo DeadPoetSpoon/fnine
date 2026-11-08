@@ -1,0 +1,9 @@
+<div class="bookmarks-panel" id="bookmarks-panel" data-book-id="{{ bookmark_book_id }}" data-empty="{{ t.get("bookmark.empty") }}" data-error="{{ t.get("reader.save_failed") }}" data-rename="{{ t.get("bookmark.rename") }}" data-delete="{{ t.get("book.delete") }}" data-delete-confirm="{{ t.get("bookmark.delete_confirm") }}" data-add="{{ t.get("bookmark.add") }}" data-total="{{ t.get("pagination.total") }}">
+    <nav class="pagination" aria-label="{{ t.get("bookmark.title") }}">
+        <button type="button" id="bookmarks-prev" class="btn-icon action-icon" aria-label="{{ t.get("pagination.previous") }}" title="{{ t.get("pagination.previous") }}" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg></button>
+        <span id="bookmarks-page"></span>
+        <button type="button" id="bookmarks-next" class="btn-icon action-icon" aria-label="{{ t.get("pagination.next") }}" title="{{ t.get("pagination.next") }}" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
+    </nav>
+    <ul id="bookmarks-list" class="bookmarks-list"></ul>
+    <p id="bookmarks-status" role="status" aria-live="polite"></p>
+</div>

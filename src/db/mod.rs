@@ -1,4 +1,5 @@
 pub mod annotations;
+pub mod bookmarks;
 pub mod books;
 pub mod fonts;
 pub mod progress;

@@ -1,6 +1,6 @@
 # Fnine — consolidated implementation plan
 
-Updated: October 26, 2026. Release: v0.7.1. Target: private, single-user, text-first EPUB reading.
+Updated: November 8, 2026. Release: v0.8.0. Target: private, single-user, text-first EPUB reading.
 Keep Rust/Axum/Askama, TOML persistence, and compatible existing routes. No accounts,
 database rewrite, raw EPUB HTML rendering, or network retrieval of publisher content.
 
@@ -50,20 +50,27 @@ recorded separately rather than treating an unexecuted check as a pass.
 - Implemented: real EPUB navigation labels and spine mapping; coherent accessible mobile TOC.
 - Implemented after v0.7.0: absent, blank, or literal `null` navigation titles inherit the
   previous chapter's base name with localized `(continued)`, `(continued 2)` / `(续)`, `(续 2)`
-  suffixes. A real title resets the sequence; an untitled first chapter keeps `Chapter 1`.
+  suffixes. A real title resets the sequence; an untitled first chapter is localized as `Cover`,
+  or skipped if it contains no readable text.
   Spine indices and stored progress/annotations do not change; cached titles remain language-neutral.
 - Implemented after v0.7.0: compact superscript note markers stay grouped with the preceding
   character at line breaks, with adjacent references sharing the group. DOM grouping adds no
   text and keeps keyboard activation and clickable marker height.
-- Implemented after v0.7.0: save failures appear in the top reader toolbar; successful saves
-  remain silent and clear previous warnings without reserving toolbar space. Autosave is unchanged.
+- Implemented: manual save failures appear in the top reader toolbar; successful saves
+  show a brief confirmation and clear previous warnings.
 - Implemented: query override → saved settings → defaults; safe generated custom-font CSS.
-- Implemented: browser-compatible character coordinates; queued saves on chapter entry,
-  scroll, visibility/page exit; layout/font-aware restore and visible save failures.
-- Implemented: annotation color controls, editing, overlapping highlights and Markdown export.
-  Add PATCH /api/book/{id}/annotations/{aid} and GET /book/{id}/annotations/export.
+- Implemented in v0.8.0: browser-compatible character coordinates; pushpin-only manual saves,
+  last explicit save wins across devices, layout/font-aware restore, no background writes.
+- Implemented in v0.8.0: independent named bookmarks with per-book TOML persistence,
+  add/rename/delete in book details, and 10-item pagination with links only in the reader sidebar.
+- Implemented: inline metadata and borderless edit/delete icons, icon pagination, themed
+  text fields matching library selects, and a toolbar link to the latest manually saved position.
+- Implemented: book detail bookmarks and annotations share accessible tabs, preserving
+  the active tab and independent page numbers across refreshes, edits, and deletion.
+- Implemented: annotation color controls, editing, overlapping highlights; v0.8.0 adds
+  10-item detail pagination and mobile controls below the quote. Markdown export is removed.
 - Implemented: continue-reading, title/author/upload/last-read sorting and
-  unread/reading/finished filters (finished: final chapter >=99%).
+  unread/reading/finished filters (finished: manual confirmation only; legacy inferred status resets).
 - Implemented: English/Chinese UI additions, document language and accessible labels.
 - Implemented: source loopback default, deliberate container/LAN exposure, mutation Origin
   validation, root-default container with optional `--user fnine:fnine` operation,
@@ -89,6 +96,26 @@ recorded separately rather than treating an unexecuted check as a pass.
 - Skipped: Firefox testing, explicitly requested by the user. No Firefox result is claimed.
 
 ## Verification record
+
+- v0.8.0 UI refinement: 32 Rust tests, strict Clippy, formatting and the full Edge Chromium
+  suite pass. Browser coverage verifies 320/390 px inline metadata/actions, themed text fields,
+  read-only reader bookmark links, and jumping to another device's saved position without
+  writing progress. Mobile screenshots confirm matching monochrome edit/delete icons.
+
+- v0.8.0 Windows saving fix on November 8: reproduced access-denied errors from opening
+  directories as regular files for syncing. Directory syncing now applies on Unix; Windows
+  retains synced file writes and atomic replacement. Uploaded covers use writable handles
+  when flushing. Added regression coverage for initial save and replacement without temp files.
+  Formatting and strict Clippy pass; Windows Rust tests: 32 passed, 0 failed, 2 opt-in helpers
+  ignored. The browser fixture generator and full Edge Chromium suite pass separately,
+  covering settings/font/book uploads, progress saves and multi-device restore, bookmark
+  creation/rename/deletion/pagination, annotations, manual completion and save failure recovery.
+- v0.8.0 read-only browser smoke passes against the actual server using an isolated seeded
+  library and Edge Chromium: independent bookmark/annotation pagination, 320/390 px annotation
+  width and edit controls, mobile bookmark jump/dialog, explicit-position cleanup and saved
+  position restore, no background progress writes, completion entry, inferred completion reset,
+  export removal, and no page JavaScript errors. Screenshots inspected for mobile layout.
+  WSL validation was unavailable because automatic approval review returned HTTP 503.
 
 - Release v0.7.1: formatting, strict Clippy, 25 release-mode Rust tests, release build,
   JavaScript syntax checks, and the read-only EPUB audit passed (773 resolved references).

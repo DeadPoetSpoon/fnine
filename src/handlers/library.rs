@@ -8,6 +8,7 @@ use crate::db::annotations::Annotation;
 use crate::db::books::Book;
 use crate::error::AppError;
 use crate::i18n::translations::Translations;
+use crate::pagination::{self, Page};
 use crate::state::AppState;
 
 // ── Templates ──────────────────────────────────────────────
@@ -65,7 +66,9 @@ impl From<Annotation> for AnnotationDisplay {
 #[template(path = "book_detail.html")]
 struct BookDetailTemplate<'a> {
     book: &'a Book,
-    annotations: Vec<AnnotationDisplay>,
+    annotations: Page<AnnotationDisplay>,
+    bookmark_page: usize,
+    annotations_active: bool,
     file_size_display: String,
     t: &'a Translations,
     theme: &'a str,
@@ -114,12 +117,9 @@ pub async fn home(
     }
     books.retain(|book| {
         let entry = progress.entries.get(&book.id);
-        let finished = entry.is_some_and(|entry| {
-            entry.last_chapter.saturating_add(1) >= book.chapter_count
-                && entry.last_position >= 0.99
-        });
+        let finished = book.finished;
         match status.as_str() {
-            "unread" => entry.is_none(),
+            "unread" => entry.is_none() && !finished,
             "reading" => entry.is_some() && !finished,
             "finished" => finished,
             _ => true,
@@ -180,7 +180,13 @@ pub async fn book_detail(
         .ok_or_else(|| AppError::NotFound("Book not found".into()))?;
 
     let annot_store = state.annotations_store(&id);
-    let annot_data = annot_store.load().await?;
+    let mut annot_data = annot_store.load().await?;
+    annot_data.annotations.sort_by(|left, right| {
+        right
+            .created_at
+            .cmp(&left.created_at)
+            .then_with(|| right.id.cmp(&left.id))
+    });
     let (t, theme) = load_translations(&query);
 
     let file_size_display = if book.file_size < 1024 {
@@ -193,11 +199,16 @@ pub async fn book_detail(
 
     let tmpl = BookDetailTemplate {
         book,
-        annotations: annot_data
-            .annotations
-            .into_iter()
-            .map(AnnotationDisplay::from)
-            .collect(),
+        bookmark_page: pagination::number(query.get("bookmark_page"))?,
+        annotations_active: query.get("tab").is_some_and(|tab| tab == "annotations"),
+        annotations: Page::new(
+            annot_data
+                .annotations
+                .into_iter()
+                .map(AnnotationDisplay::from)
+                .collect(),
+            pagination::number(query.get("annotation_page"))?,
+        ),
         file_size_display,
         t: &t,
         theme: &theme,

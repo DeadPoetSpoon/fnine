@@ -10,38 +10,41 @@
             <h3>{{ t.get("reader.toc") }}</h3>
             <button class="btn-icon" data-action="hide-sidebar" aria-label="{{ t.get("reader.hide_toc") }}">✕</button>
         </div>
-        <nav class="toc-list">
+        <div class="sidebar-tabs"><button type="button" class="btn btn-secondary btn-sm" id="toc-tab" aria-pressed="true" aria-controls="toc-list">{{ t.get("reader.toc") }}</button><button type="button" class="btn btn-secondary btn-sm" id="bookmarks-tab" aria-pressed="false" aria-controls="reader-bookmarks">{{ t.get("bookmark.title") }}</button></div>
+        <nav class="toc-list" id="toc-list">
             {% for ch in toc %}
-            <a href="/book/{{ book_id }}/read/{{ ch.index }}?lang={{ t.lang() }}&theme={{ theme }}" class="toc-item {% if ch.index == chapter_index %}active{% endif %}">{{ ch.label }}</a>
+            <a href="/book/{{ book_id }}/read/{{ ch.index }}?pos=0&lang={{ t.lang() }}&theme={{ theme }}" class="toc-item {% if ch.index == chapter_index %}active{% endif %}">{{ ch.label }}</a>
             {% endfor %}
         </nav>
+        <div id="reader-bookmarks" hidden>{% let bookmark_book_id = book_id %}{% include "components/bookmarks.html" %}</div>
     </aside>
     <div class="reader-main">
         <div class="reader-toolbar">
             <button class="btn-icon" data-action="open-toc" aria-label="{{ t.get("reader.open_toc") }}" aria-controls="toc-sidebar" aria-expanded="false" id="toc-open-btn">☰</button>
             <span class="chapter-title">{{ chapter_label }}</span>
-            <span id="reader-status" class="reader-status" role="status" aria-live="polite" data-error="{{ t.get("reader.save_failed") }}" hidden></span>
-            {% if last_chapter > 0 || last_position > 0.0 %}
-            <a href="/book/{{ book_id }}/read/{{ last_chapter }}?pos={{ last_position }}&lang={{ t.lang() }}&theme={{ theme }}" class="btn btn-secondary btn-sm" id="jump-last-btn">{{ t.get("reader.jump_last") }}</a>
-            {% endif %}
+            <span id="reader-status" class="reader-status" role="status" aria-live="polite" data-error="{{ t.get("reader.save_failed") }}" data-saved="{{ t.get("reader.saved") }}" hidden></span>
+            <button type="button" class="btn-icon" id="add-bookmark-btn" aria-label="{{ t.get("bookmark.add") }}" title="{{ t.get("bookmark.add") }}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9Z"/></svg></button>
+            <button type="button" class="btn-icon" id="save-progress-btn" aria-label="{{ t.get("reader.save_progress") }}" title="{{ t.get("reader.save_progress") }}" disabled><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m16 3 5 5-4 1-4 6-2 1-3-3 1-2 6-4 1-4ZM8 16l-5 5"/></svg></button>
+            <a class="btn-icon action-icon" id="jump-progress-btn" href="/book/{{ book_id }}/read?lang={{ t.lang() }}&theme={{ theme }}" aria-label="{{ t.get("reader.jump_progress") }}" title="{{ t.get("reader.jump_progress") }}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 4v16h16M8 16 20 4M12 4h8v8"/></svg></a>
             <button class="btn-icon" data-action="toggle-fullscreen" id="fullscreen-btn" aria-label="{{ t.get("reader.fullscreen") }}" title="{{ t.get("reader.fullscreen") }}">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
             </button>
         </div>
         <article class="chapter-content" id="chapter-content"><pre id="chapter-text" class="plain-text{% if !custom_font.is_empty() %} custom-font{% endif %}" style="font-size: {{ font_size }}px">{% for run in chapter_content.runs %}{% if run.note_key.is_empty() %}{{ run.text }}{% else %}<button type="button" class="fn-ref" data-note="{{ run.note_key }}" aria-haspopup="dialog" aria-controls="endnote-dialog">{{ run.text }}</button>{% endif %}{% endfor %}</pre></article>
         <nav class="reader-nav">
-            {% if chapter_index > 0 %}
-            <a href="/book/{{ book_id }}/read/{{ chapter_index - 1 }}?lang={{ t.lang() }}&theme={{ theme }}" class="btn btn-secondary">← {{ t.get("reader.prev_chapter") }}</a>
+            {% if let Some(previous) = previous_chapter %}
+            <a href="/book/{{ book_id }}/read/{{ previous }}?pos=0&lang={{ t.lang() }}&theme={{ theme }}" class="btn btn-secondary">← {{ t.get("reader.prev_chapter") }}</a>
             {% else %}
             <span class="btn btn-secondary disabled">← {{ t.get("reader.prev_chapter") }}</span>
             {% endif %}
-            <span class="chapter-indicator">{{ chapter_index + 1 }} / {{ chapter_count }}</span>
-            {% if chapter_index + 1 < chapter_count %}
-            <a href="/book/{{ book_id }}/read/{{ chapter_index + 1 }}?lang={{ t.lang() }}&theme={{ theme }}" class="btn btn-primary">{{ t.get("reader.next_chapter") }} →</a>
+            <span class="chapter-indicator">{{ chapter_number }} / {{ chapter_count }}</span>
+            {% if let Some(next) = next_chapter %}
+            <a href="/book/{{ book_id }}/read/{{ next }}?pos=0&lang={{ t.lang() }}&theme={{ theme }}" class="btn btn-primary">{{ t.get("reader.next_chapter") }} →</a>
             {% else %}
             <span class="btn btn-primary disabled">{{ t.get("reader.next_chapter") }} →</span>
             {% endif %}
         </nav>
+        {% if next_chapter.is_none() %}<div class="completion-actions">{% if finished %}<p>{{ t.get("library.finished") }}</p>{% else %}<button type="button" class="btn btn-secondary" data-book-status="true" data-book-id="{{ book_id }}" data-confirm="{{ t.get("book.finish_confirm") }}">{{ t.get("book.mark_finished") }}</button><span class="status-message" role="status" data-error="{{ t.get("reader.save_failed") }}"></span>{% endif %}</div>{% endif %}
     </div>
 </div>
 {% for note in chapter_content.notes %}
@@ -54,4 +57,7 @@
     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/></svg>
 </button>
 <script src="/static/js/reader.js"></script>
+{% include "components/bookmark_dialog.html" %}
+<script src="/static/js/bookmarks.js"></script>
+<script src="/static/js/book-status.js"></script>
 {% endblock %}

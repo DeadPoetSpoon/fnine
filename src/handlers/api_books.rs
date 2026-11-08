@@ -1,8 +1,10 @@
+use axum::Json;
 use axum::body::Body;
 use axum::extract::{Multipart, Path, Query, Request, State};
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Redirect, Response};
 use chrono::Utc;
+use serde::Deserialize;
 use std::collections::HashMap;
 use tokio::fs;
 use tower_http::services::ServeFile;
@@ -12,6 +14,29 @@ use crate::db::books::Book;
 use crate::epub::parser::extract_metadata;
 use crate::error::AppError;
 use crate::state::AppState;
+
+#[derive(Deserialize)]
+pub struct StatusInput {
+    pub finished: bool,
+}
+
+pub async fn set_status(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(input): Json<StatusInput>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    state.book(&id).await?;
+    let mut data = state.books.load().await?;
+    let book = data
+        .books
+        .iter_mut()
+        .find(|book| book.id == id)
+        .ok_or_else(|| AppError::NotFound("Book not found".into()))?;
+    book.finished = input.finished;
+    state.books.save(&data).await?;
+    state.invalidate_books_cache();
+    Ok(Json(serde_json::json!({ "finished": input.finished })))
+}
 
 /// POST /upload
 pub async fn upload_book(
@@ -54,7 +79,12 @@ pub async fn upload_book(
         let cover_ext = if let (Some(cover_bytes), Some(ext)) = (meta.cover_bytes, meta.cover_ext) {
             let cover_path = state.covers_dir().join(format!("{id}.{ext}"));
             fs::write(&cover_path, &cover_bytes).await?;
-            fs::File::open(&cover_path).await?.sync_all().await?;
+            fs::OpenOptions::new()
+                .write(true)
+                .open(&cover_path)
+                .await?
+                .sync_all()
+                .await?;
             Some(ext)
         } else {
             None
@@ -69,6 +99,7 @@ pub async fn upload_book(
             file_name,
             file_size,
             uploaded_at: Utc::now(),
+            finished: false,
             normalization_version: 2,
         };
 
@@ -85,8 +116,8 @@ pub async fn upload_book(
             })
             .await?;
         fs::rename(&staged, &epub_path).await?;
-        fs::File::open(state.books_dir()).await?.sync_all().await?;
-        fs::File::open(state.covers_dir()).await?.sync_all().await?;
+        crate::db::store::sync_directory(&state.books_dir()).await?;
+        crate::db::store::sync_directory(&state.covers_dir()).await?;
         let mut data_store = state.books.load().await?;
         data_store.books.push(book);
         state.books.save(&data_store).await?;

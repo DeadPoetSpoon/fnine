@@ -6,6 +6,7 @@ mod error;
 mod handlers;
 mod i18n;
 mod middleware;
+mod pagination;
 mod state;
 #[cfg(test)]
 mod tests;
@@ -104,8 +105,17 @@ fn router(state: AppState) -> Router {
                 .patch(handlers::api_annotations::edit_annotation),
         )
         .route(
-            "/book/{id}/annotations/export",
-            get(handlers::api_annotations::export_annotations),
+            "/api/book/{id}/status",
+            post(handlers::api_books::set_status),
+        )
+        .route(
+            "/api/book/{id}/bookmarks",
+            get(handlers::api_bookmarks::list).post(handlers::api_bookmarks::create),
+        )
+        .route(
+            "/api/book/{id}/bookmarks/{bid}",
+            axum::routing::patch(handlers::api_bookmarks::rename)
+                .delete(handlers::api_bookmarks::delete),
         )
         // ── Static files ───────────────────────────────
         .nest_service("/static", ServeDir::new("static"))

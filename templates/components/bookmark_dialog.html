@@ -1,0 +1,12 @@
+<dialog id="bookmark-dialog" class="note-dialog" aria-labelledby="bookmark-title">
+    <form id="bookmark-form">
+        <h2 id="bookmark-title">{{ t.get("bookmark.add") }}</h2>
+        <label for="bookmark-name">{{ t.get("bookmark.name") }}</label>
+        <input id="bookmark-name" name="name" type="text" maxlength="200" placeholder="{{ t.get("bookmark.default_name") }}">
+        <p id="bookmark-error" role="status" aria-live="polite"></p>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">{{ t.get("settings.save") }}</button>
+            <button type="button" class="btn btn-secondary" id="bookmark-cancel">{{ t.get("book.cancel") }}</button>
+        </div>
+    </form>
+</dialog>

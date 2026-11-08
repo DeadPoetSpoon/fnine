@@ -73,7 +73,7 @@ where
             drop(file);
             fs::rename(&tmp_path, &self.path).await?;
             if let Some(parent) = self.path.parent() {
-                fs::File::open(parent).await?.sync_all().await?;
+                sync_directory(parent).await?;
             }
             Ok::<_, std::io::Error>(())
         }
@@ -83,6 +83,18 @@ where
         }
         result?;
 
+        Ok(())
+    }
+}
+
+pub async fn sync_directory(path: &Path) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        fs::File::open(path).await?.sync_all().await
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
         Ok(())
     }
 }

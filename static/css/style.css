@@ -19,7 +19,11 @@
     --color-nav-bg: #ffffff;
     --radius: 8px;
     --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    --page-gutter: 1rem;
+    --page-max-width: 1200px;
 }
+
+html { scrollbar-gutter: stable; }
 
 body {
     font-family:
@@ -34,14 +38,30 @@ body {
     overflow-x: hidden;
 }
 
-select {
-    appearance: none;
+select,
+input[type="text"],
+textarea {
     min-height: 44px;
     max-width: 100%;
-    padding: 0.6rem 2.5rem 0.6rem 0.85rem;
+    padding: 0.6rem 0.85rem;
     border: 1px solid var(--color-border);
     border-radius: var(--radius);
     background-color: var(--color-surface);
+    color: var(--color-text);
+    font: inherit;
+    font-size: 0.95rem;
+    line-height: 1.4;
+    box-shadow: var(--shadow);
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+textarea { resize: vertical; }
+input[type="text"]::placeholder,
+textarea::placeholder { color: var(--color-text-muted); opacity: 1; }
+
+select {
+    appearance: none;
+    padding-right: 2.5rem;
     background-image:
         linear-gradient(45deg, transparent 50%, var(--color-text-muted) 50%),
         linear-gradient(135deg, var(--color-text-muted) 50%, transparent 50%);
@@ -50,17 +70,15 @@ select {
         calc(100% - 14px) center;
     background-size: 5px 5px;
     background-repeat: no-repeat;
-    color: var(--color-text);
-    font: inherit;
-    font-size: 0.95rem;
-    line-height: 1.4;
-    box-shadow: var(--shadow);
     cursor: pointer;
-    transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 select:hover:not(:disabled),
-select:focus-visible {
+select:focus-visible,
+input[type="text"]:hover:not(:disabled),
+input[type="text"]:focus-visible,
+textarea:hover:not(:disabled),
+textarea:focus-visible {
     border-color: var(--color-primary);
 }
 
@@ -92,9 +110,10 @@ select option {
 }
 
 .nav-inner {
-    max-width: 1200px;
+    width: 100%;
+    max-width: var(--page-max-width);
     margin: 0 auto;
-    padding: 0 1rem;
+    padding: 0 var(--page-gutter);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -130,8 +149,11 @@ select option {
 /* === Main content === */
 .container {
     flex: 1;
-    padding: 1rem;
-    max-width: 100%;
+    width: 100%;
+    min-width: 0;
+    padding: 1rem var(--page-gutter);
+    max-width: var(--page-max-width);
+    margin: 0 auto;
 }
 
 /* === Footer === */
@@ -206,6 +228,7 @@ select option {
 }
 
 .book-card {
+    min-width: 0;
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius);
@@ -292,6 +315,7 @@ select option {
 
 /* === Upload Form === */
 .upload-form {
+    width: 100%;
     max-width: 100%;
     margin: 1rem 0;
 }
@@ -306,6 +330,7 @@ select option {
     border-radius: var(--radius);
     padding: 2rem 1rem;
     text-align: center;
+    overflow-wrap: anywhere;
     transition:
         border-color 0.2s,
         background 0.2s;
@@ -379,6 +404,8 @@ select option {
 
 .book-detail-info {
     flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .book-detail-info h1 {
@@ -463,7 +490,8 @@ select option {
 /* === Reader Layout === */
 .reader-layout {
     display: flex;
-    margin: -1rem;
+    width: 100%;
+    min-width: 0;
 }
 
 .toc-sidebar {
@@ -893,7 +921,7 @@ html:-webkit-full-screen .fullscreen-exit-fab {
 
 /* === Annotations Section === */
 .annotations-section {
-    max-width: 1200px;
+    width: 100%;
     margin: 1.5rem auto 0;
     padding: 0 0.5rem;
 }
@@ -909,8 +937,36 @@ html:-webkit-full-screen .fullscreen-exit-fab {
     gap: 0.6rem;
 }
 
+.entry-tabs {
+    display: flex;
+    gap: 1.5rem;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.entry-tabs [role="tab"] {
+    padding: 0.75rem 0;
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: none;
+    color: var(--color-text-muted);
+    font: inherit;
+    cursor: pointer;
+}
+
+.entry-tabs [role="tab"]:hover,
+.entry-tabs [aria-selected="true"] {
+    color: var(--color-primary);
+}
+
+.entry-tabs [aria-selected="true"] {
+    border-bottom-color: var(--color-primary);
+}
+
+.entry-empty { margin: 1rem 0; color: var(--color-text-muted); }
+
 .annotation-item {
     display: flex;
+    flex-direction: column;
     gap: 0.75rem;
     align-items: flex-start;
     background: var(--color-surface);
@@ -918,6 +974,27 @@ html:-webkit-full-screen .fullscreen-exit-fab {
     border-radius: var(--radius);
     padding: 0.75rem;
 }
+
+.annotation-body { width: 100%; overflow-wrap: anywhere; }
+.entry-footer { display: flex; align-items: center; gap: .125rem; width: 100%; min-width: 0; }
+.entry-footer .annotation-meta { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: .72rem; }
+.annotation-delete-form { flex-shrink: 0; }
+.annotation-edit { width: 100%; margin-top: .5rem; }
+.annotation-edit textarea { width: 100%; box-sizing: border-box; }
+.pagination, .sidebar-tabs { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }
+.pagination { justify-content: center; margin: 1rem 0; font-size: .85rem; }
+.sidebar-tabs { padding: .75rem; }
+.bookmarks-list { list-style: none; margin: 0; padding: 0; }
+.bookmark-item { display: flex; flex-direction: column; gap: .4rem; padding: .75rem; border-bottom: 1px solid var(--color-border); min-width: 0; }
+.bookmark-link { overflow-wrap: anywhere; }
+.bookmarks-panel { min-width: 0; padding: 0 .5rem; }
+#bookmark-name { width: 100%; box-sizing: border-box; }
+.completion-actions { padding: 1rem; text-align: center; }
+.reader-toolbar .btn-icon { flex-shrink: 0; min-width: 36px; min-height: 44px; padding: .3rem; border: none; background: none; color: var(--color-text-muted); text-decoration: none; }
+.reader-toolbar .btn-icon:hover { color: var(--color-primary); }
+.reader-toolbar { flex-wrap: wrap; }
+.reader-status { order: 2; flex-basis: 100%; max-width: 100%; }
+.btn:disabled, .btn-icon:disabled { opacity: .55; cursor: default; }
 
 .annotation-body {
     flex: 1;
@@ -952,7 +1029,7 @@ html:-webkit-full-screen .fullscreen-exit-fab {
     color: var(--color-text-muted);
 }
 
-.annotation-delete-form button {
+.btn-icon.action-icon {
     background: none;
     border: none;
     cursor: pointer;
@@ -964,9 +1041,14 @@ html:-webkit-full-screen .fullscreen-exit-fab {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    text-decoration: none;
+    flex-shrink: 0;
 }
 
-.annotation-delete-form button:hover {
+.entry-footer .action-icon { min-width: 32px; width: 32px; padding: .2rem; }
+.action-icon:hover { color: var(--color-primary); }
+.action-icon:disabled { cursor: default; }
+.action-icon.action-delete:hover {
     color: #d9534f;
 }
 
@@ -979,7 +1061,7 @@ html:-webkit-full-screen .fullscreen-exit-fab {
 
 .settings-form {
     width: 100%;
-    max-width: 440px;
+    min-width: 0;
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius);
@@ -1116,8 +1198,10 @@ html:-webkit-full-screen .fullscreen-exit-fab {
    Responsive — Tablet (≥ 640px)
    ────────────────────────────────────────────────────────── */
 @media (min-width: 640px) {
+    :root { --page-gutter: 1.5rem; }
+
     .container {
-        padding: 1.25rem 1.5rem;
+        padding: 1.25rem var(--page-gutter);
     }
 
     .brand {
@@ -1147,8 +1231,7 @@ html:-webkit-full-screen .fullscreen-exit-fab {
     }
 
     .upload-form {
-        max-width: 500px;
-        margin: 1.5rem auto;
+        margin: 1.5rem 0;
     }
 
     .file-dropzone {
@@ -1200,10 +1283,10 @@ html:-webkit-full-screen .fullscreen-exit-fab {
    Responsive — Desktop (≥ 1024px)
    ────────────────────────────────────────────────────────── */
 @media (min-width: 1024px) {
+    :root { --page-gutter: 2rem; }
+
     .container {
-        padding: 1.5rem 2rem;
-        max-width: 1200px;
-        margin: 0 auto;
+        padding: 1.5rem var(--page-gutter);
     }
 
     .book-grid {
@@ -1269,7 +1352,7 @@ html:-webkit-full-screen .fullscreen-exit-fab {
    ────────────────────────────────────────────────────────── */
 @media (max-width: 380px) {
     .nav-inner {
-        padding: 0 0.6rem;
+        padding: 0 var(--page-gutter);
     }
 
     .brand {

@@ -108,6 +108,31 @@ async function checkSelect(locator) {
   assert.ok(styles.padding >= 32 && styles.height >= 44 && styles.fits);
 }
 
+async function checkEntryFooter(locator) {
+  assert.ok(await locator.evaluate(function (footer) {
+    const meta = footer.querySelector(".annotation-meta");
+    const icons = Array.from(footer.querySelectorAll(".action-icon"));
+    const bounds = footer.getBoundingClientRect();
+    const metaBounds = meta.getBoundingClientRect();
+    return icons.length === 2 && icons.every(function (icon) {
+      const iconBounds = icon.getBoundingClientRect();
+      const style = getComputedStyle(icon);
+      return Math.abs(iconBounds.top + iconBounds.height / 2 - metaBounds.top - metaBounds.height / 2) < 1
+        && iconBounds.right <= bounds.right + 1 && style.borderStyle === "none" && style.backgroundColor === "rgba(0, 0, 0, 0)"
+        && icon.getAttribute("aria-label") && !icon.textContent.includes("Rename") && !icon.textContent.includes("Delete");
+    }) && bounds.right <= window.innerWidth;
+  }), "Metadata and borderless icon controls must share one line");
+}
+
+async function checkTextInput(locator) {
+  assert.ok(await locator.evaluate(function (input) {
+    const style = getComputedStyle(input);
+    return style.borderRadius === "8px" && style.borderStyle === "solid" && style.boxShadow !== "none"
+      && style.backgroundColor === getComputedStyle(document.querySelector("select")).backgroundColor
+      && input.getBoundingClientRect().right <= window.innerWidth;
+  }), "Text fields must share the library select's border, radius, shadow and theme");
+}
+
 async function run() {
   const root = path.resolve(__dirname, "..");
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "fnine-browser-"));
@@ -124,7 +149,7 @@ async function run() {
     });
   });
   const base = `http://127.0.0.1:${port}`;
-  const server = spawn(path.join(root, "target/debug/fnine"), [], {
+  const server = spawn(path.resolve(root, process.env.CARGO_TARGET_DIR || "target", "debug/fnine"), [], {
     cwd: root,
     env: { ...process.env, FNINE_HOST: "127.0.0.1", FNINE_PORT: String(port), FNINE_DATA_DIR: path.join(temporary, "data") },
     stdio: ["ignore", "pipe", "pipe"],
@@ -152,7 +177,7 @@ async function run() {
     await page.locator('label').filter({ has: page.locator('[name="theme"][value="dark"]') }).click();
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await page.waitForURL("**/settings?lang=en&theme=dark");
-    const fontPath = [process.env.FNINE_TEST_FONT, "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf", "/usr/share/fonts/ttf-ia-writer/iAWriterQuattroS-Regular.ttf"].find(function (candidate) { return candidate && fs.existsSync(candidate); });
+    const fontPath = [process.env.FNINE_TEST_FONT, "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf", "/usr/share/fonts/ttf-ia-writer/iAWriterQuattroS-Regular.ttf", "C:/Windows/Fonts/arial.ttf"].find(function (candidate) { return candidate && fs.existsSync(candidate); });
     assert.ok(fontPath, "Set FNINE_TEST_FONT to a valid TTF file for font-loading coverage");
     await page.locator("#font-upload-input").setInputFiles(fontPath);
     await page.waitForURL("**/settings");
@@ -169,10 +194,27 @@ async function run() {
     await page.locator(".upload-form").getByRole("button", { name: "Upload" }).click();
     await page.waitForURL("**/book/*?lang=en&theme=dark");
     const bookPath = new URL(page.url()).pathname;
-    await waitForProgressSave(page, function () { return page.getByRole("link", { name: "Start Reading" }).click(); });
+    assert.equal(await page.locator('#book-bookmarks-tab').getAttribute('aria-selected'), 'true');
+    assert.equal(await page.locator('#book-annotations').isVisible(), false);
+    await page.locator('#book-bookmarks-tab').focus();
+    await page.keyboard.press('ArrowRight');
+    assert.equal(await page.locator('#book-annotations-tab').getAttribute('aria-selected'), 'true');
+    assert.equal(await page.locator('#bookmarks-section').isVisible(), false);
+    assert.equal(await page.locator('#book-annotations .entry-empty').textContent(), 'No annotations yet');
+    await page.reload();
+    assert.equal(await page.locator('#book-annotations').isVisible(), true);
+    await page.locator('#book-annotations-tab').focus();
+    await page.keyboard.press('Home');
+    assert.equal(await page.locator('#bookmarks-section').isVisible(), true);
+    let progressWrites = 0;
+    context.on("request", function (request) { if (new URL(request.url()).pathname === "/api/progress" && request.method() === "POST") progressWrites++; });
+    await page.getByRole("link", { name: "Start Reading" }).click();
     await page.waitForURL("**/read/0?lang=en&theme=dark");
     assert.match(await page.locator(".chapter-title").textContent(), /Actual chapter title/);
     await checkReaderStatus(page);
+    await page.waitForFunction(function () { return !document.getElementById("save-progress-btn").disabled; });
+    assert.equal(progressWrites, 0);
+    assert.equal(await page.locator("#jump-last-btn").count(), 0);
     const originalPage = await context.request.get(page.url());
     assert.ok(originalPage.ok());
     assert.ok(await page.evaluate(function (html) {
@@ -218,6 +260,8 @@ async function run() {
     const bookId = bookPath.split("/").pop();
     await reference.scrollIntoViewIfNeeded();
     await page.waitForTimeout(650);
+    assert.equal(progressWrites, 0);
+    await waitForProgressSave(page, function () { return page.locator("#save-progress-btn").click(); });
     const current = await (await context.request.get(base + "/api/recent")).json();
     await reference.click();
     await page.waitForTimeout(650);
@@ -241,19 +285,86 @@ async function run() {
     const text = await page.locator("#chapter-text").textContent();
     const overlap = await context.request.post(base + `/api/book/${bookId}/annotations`, { data: { chapter: 0, selected_text: text.slice(3, 12), note: "Overlap", position_start: 3 / text.length, position_end: 12 / text.length, color: "#ffb3c6" } });
     assert.ok(overlap.ok());
-    await waitForProgressSave(page, function () { return page.reload(); });
+    await page.reload();
     await checkReaderStatus(page);
     assert.ok(await page.locator("mark").count() >= 3);
     assert.equal(await page.locator("#chapter-text").textContent(), text);
 
     await page.evaluate(function () { window.scrollTo(0, document.documentElement.scrollHeight * 0.45); });
     await page.waitForTimeout(900);
+    assert.equal(progressWrites, 1);
+    await waitForProgressSave(page, function () { return page.locator("#save-progress-btn").click(); });
     const saved = await (await context.request.get(base + "/api/recent")).json();
     assert.ok(saved.progress.position > 0.2 && saved.progress.position < 0.8);
-    await waitForProgressSave(page, function () { return page.reload(); });
+    await page.reload();
     await checkReaderStatus(page);
+    await page.waitForFunction(function () { return !document.getElementById("save-progress-btn").disabled; });
+    assert.equal(Number(await page.locator("#reader-app").getAttribute("data-position")), saved.progress.position);
+    assert.ok(await page.evaluate(function () { return window.scrollY > 0; }));
     const restored = await (await context.request.get(base + "/api/recent")).json();
     assert.ok(Math.abs(restored.progress.position - saved.progress.position) < 0.02);
+    assert.equal(progressWrites, 2);
+
+    await page.locator("#add-bookmark-btn").click();
+    await checkTextInput(page.locator("#bookmark-name"));
+    await page.locator("#bookmark-dialog").getByRole("button", { name: "Save", exact: true }).click();
+    await page.waitForFunction(function () { return !document.getElementById("bookmark-dialog").open; });
+    await page.locator("#bookmarks-tab").click();
+    await page.locator(".bookmark-item").first().waitFor();
+    assert.match(await page.locator(".bookmark-link").first().textContent(), /Actual chapter title · \d+%/);
+    const bookmarksBefore = await (await context.request.get(base + `/api/book/${bookId}/bookmarks`)).json();
+    const firstBookmark = bookmarksBefore.items[0];
+    assert.equal(await page.locator(".bookmark-item button, .bookmark-item .annotation-meta").count(), 0);
+    await page.goto(base + bookPath);
+    await page.locator(".bookmark-item").first().waitFor();
+    await checkEntryFooter(page.locator(".bookmark-footer").first());
+    await page.locator(".bookmark-item").first().getByRole("button", { name: "Rename", exact: true }).click();
+    await page.locator("#bookmark-name").fill("Named bookmark 中文");
+    await page.locator("#bookmark-dialog").getByRole("button", { name: "Save", exact: true }).click();
+    await page.getByRole("link", { name: "Named bookmark 中文", exact: true }).waitFor();
+    assert.equal(progressWrites, 2);
+    await page.goto(base + bookPath + "/read/0");
+    await page.waitForFunction(function () { return !document.getElementById("save-progress-btn").disabled; });
+
+    const otherContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const otherPage = await otherContext.newPage();
+    otherPage.on("pageerror", function (error) { errors.push(error.message); });
+    let otherWrites = 0;
+    otherContext.on("request", function (request) { if (new URL(request.url()).pathname === "/api/progress" && request.method() === "POST") otherWrites++; });
+    await otherPage.goto(base + bookPath + "/read");
+    await otherPage.waitForFunction(function () { return !document.getElementById("save-progress-btn").disabled; });
+    assert.equal(Number(await otherPage.locator("#reader-app").getAttribute("data-position")), saved.progress.position);
+    await otherPage.evaluate(function () { window.scrollTo(0, 0); });
+    await waitForProgressSave(otherPage, function () { return otherPage.locator("#save-progress-btn").click(); });
+    const latest = await (await context.request.get(base + "/api/recent")).json();
+    assert.ok(latest.progress.position < saved.progress.position);
+    await page.evaluate(function () {
+      document.dispatchEvent(new Event("visibilitychange"));
+      window.dispatchEvent(new Event("pagehide"));
+      window.scrollBy(0, 600);
+    });
+    await page.waitForTimeout(700);
+    assert.equal((await (await context.request.get(base + "/api/recent")).json()).progress.position, latest.progress.position);
+    assert.equal(Number(await page.locator("#reader-app").getAttribute("data-position")), saved.progress.position);
+    assert.ok(await page.locator("#jump-progress-btn").evaluate(function (link) { return link.previousElementSibling.id === "save-progress-btn"; }));
+    await page.locator("#jump-progress-btn").click();
+    await page.waitForFunction(function () { return !document.getElementById("save-progress-btn").disabled; });
+    assert.equal(Number(await page.locator("#reader-app").getAttribute("data-position")), latest.progress.position);
+    assert.equal(progressWrites, 2);
+    await page.locator("#bookmarks-tab").click();
+    await page.getByRole("link", { name: "Named bookmark 中文", exact: true }).waitFor();
+    await page.getByRole("link", { name: "Named bookmark 中文", exact: true }).click();
+    await page.waitForFunction(function () { return !document.getElementById("save-progress-btn").disabled; });
+    assert.equal(Number(await page.locator("#reader-app").getAttribute("data-position")), firstBookmark.position);
+    assert.equal(progressWrites, 2);
+    await page.reload();
+    await page.waitForFunction(function () { return !document.getElementById("save-progress-btn").disabled; });
+    assert.equal(progressWrites, 2);
+    await page.goto(base + bookPath + "/read");
+    await page.waitForFunction(function () { return !document.getElementById("save-progress-btn").disabled; });
+    assert.equal(Number(await page.locator("#reader-app").getAttribute("data-position")), latest.progress.position);
+    assert.equal(otherWrites, 1);
+    await otherContext.close();
 
     await page.setViewportSize({ width: 390, height: 844 });
     await checkNotePosition(page);
@@ -272,13 +383,90 @@ async function run() {
     await dismissNote(page, function () { return page.keyboard.press("Escape"); });
 
     await page.goto(base + bookPath);
-    await page.locator("details").first().locator("summary").click();
+    await page.locator('#book-annotations-tab').click();
+    await page.locator(".annotation-edit-toggle").first().click();
     await checkSelect(page.locator('.annotation-edit select').first());
+    await checkTextInput(page.locator(".annotation-edit textarea").first());
     await page.locator(".annotation-edit").first().locator("textarea").fill("Edited in browser");
     await page.locator(".annotation-edit").first().getByRole("button", { name: "Save", exact: true }).click();
     await page.waitForFunction(function () { return document.body.textContent.includes("Edited in browser"); });
+    assert.equal(await page.locator('#book-annotations').isVisible(), true);
+    assert.equal(await page.locator('#bookmarks-section').isVisible(), false);
     const exported = await context.request.get(base + bookPath + "/annotations/export");
-    assert.match(await exported.text(), /Edited in browser/);
+    assert.equal(exported.status(), 404);
+    for (let index = 0; index < 10; index++) {
+      const bookmark = await context.request.post(base + `/api/book/${bookId}/bookmarks`, { data: { chapter: 0, position: index / 10, name: `Bookmark ${index}` } });
+      assert.equal(bookmark.status(), 201);
+      const annotation = await context.request.post(base + `/api/book/${bookId}/annotations`, { data: { chapter: 0, selected_text: `Additional quote ${index}`, position_start: 0.1, position_end: 0.2 } });
+      assert.ok(annotation.ok());
+    }
+    await page.goto(base + bookPath + "?annotation_page=2&bookmark_page=2&lang=en&theme=dark");
+    await page.waitForFunction(function () { return document.getElementById("bookmarks-page").textContent.startsWith("2 / 2"); });
+    assert.equal(await page.locator(".annotation-item").count(), 2);
+    assert.equal(await page.locator(".bookmark-item").count(), 1);
+    assert.match(await page.locator(".bookmark-link").textContent(), /Named bookmark 中文/);
+    await page.locator("#bookmarks-prev").click();
+    await page.waitForFunction(function () { return document.querySelectorAll(".bookmark-item").length === 10; });
+    assert.equal(new URL(page.url()).searchParams.get("annotation_page"), "2");
+    await page.locator('#book-annotations-tab').click();
+    await page.locator(".annotations-section").filter({ has: page.locator(".annotations-list") }).getByRole("link", { name: "Previous page", exact: true }).click();
+    await page.waitForFunction(function () { return document.querySelectorAll(".bookmark-item").length === 10; });
+    assert.equal(await page.locator(".annotation-item").count(), 10);
+    assert.equal(new URL(page.url()).searchParams.get("bookmark_page"), "1");
+    assert.equal(await page.locator('#book-annotations').isVisible(), true);
+    for (const width of [390, 320]) {
+      await page.setViewportSize({ width, height: 844 });
+      await checkEntryFooter(page.locator(".annotation-footer").first());
+      await page.locator('#book-bookmarks-tab').click();
+      await checkEntryFooter(page.locator(".bookmark-footer").first());
+      await page.locator('#book-annotations-tab').click();
+      assert.ok(await page.locator(".annotation-item").first().evaluate(function (item) {
+        const body = item.querySelector(".annotation-body").getBoundingClientRect();
+        const bounds = item.getBoundingClientRect();
+        return body.width >= bounds.width - 30 && document.documentElement.scrollWidth <= window.innerWidth;
+      }), "Annotation controls must not squeeze the text on mobile");
+      await page.locator(".annotation-edit-toggle").first().click();
+      assert.ok(await page.locator(".annotation-edit").first().evaluate(function (form) { return form.getBoundingClientRect().right <= window.innerWidth; }));
+      await page.locator(".annotation-edit-toggle").first().click();
+    }
+    await page.locator(".annotation-item").first().screenshot({ path: path.join(root, "target/annotation-row-mobile.png") });
+    await page.locator('#book-bookmarks-tab').click();
+    await page.locator(".bookmark-item").first().screenshot({ path: path.join(root, "target/bookmark-row-mobile.png") });
+    await page.locator("#bookmarks-next").click();
+    await page.waitForFunction(function () { return document.querySelectorAll(".bookmark-item").length === 1; });
+    page.once("dialog", function (dialog) { dialog.accept(); });
+    await page.locator(".bookmark-item").getByRole("button", { name: "Delete", exact: true }).click();
+    await page.waitForFunction(function () { return document.getElementById("bookmarks-page").textContent.startsWith("1 / 1"); });
+    assert.equal(await page.locator(".bookmark-item").count(), 10);
+
+    await page.locator('#book-annotations-tab').click();
+    await Promise.all([
+      page.waitForEvent('framenavigated', function (frame) { return frame === page.mainFrame(); }),
+      page.locator('.annotation-delete-form').first().getByRole('button', { name: 'Delete', exact: true }).click(),
+    ]);
+    assert.equal(new URL(page.url()).searchParams.get('tab'), 'annotations');
+    assert.equal(await page.locator('#book-annotations').isVisible(), true);
+    assert.equal(await page.locator('#bookmarks-section').isVisible(), false);
+    assert.equal(await page.locator('.annotation-item').count(), 10);
+
+    await page.goto(base + bookPath + "/read/4?lang=en");
+    await page.locator("#toc-open-btn").click();
+    await page.locator("#bookmarks-tab").click();
+    await page.waitForFunction(function () { return document.querySelectorAll(".bookmark-item").length === 10; });
+    assert.equal(await page.locator(".bookmark-item button, .bookmark-item .annotation-meta").count(), 0);
+    await page.keyboard.press("Escape");
+    await page.evaluate(function () { window.scrollTo(0, document.documentElement.scrollHeight); });
+    await page.waitForTimeout(700);
+    const finishedBefore = await context.request.get(base + "/?status=finished");
+    assert.doesNotMatch(await finishedBefore.text(), /class="book-card"/);
+    page.once("dialog", function (dialog) { dialog.accept(); });
+    await page.getByRole("button", { name: "Mark as finished", exact: true }).click();
+    await page.waitForFunction(function () { return !document.querySelector("[data-book-status]"); });
+    await page.goto(base + "/?status=finished&lang=en");
+    assert.equal(await page.locator(".book-card").count(), 1);
+    await page.goto(base + bookPath + "?lang=en");
+    await page.getByRole("button", { name: "Mark as reading", exact: true }).click();
+    await page.getByRole("button", { name: "Mark as finished", exact: true }).waitFor();
     await page.goto(base + "/?status=reading&sort=last_read");
     assert.ok(await page.locator(".continue-reading").count());
     assert.equal(await page.locator(".book-card").count(), 1);
@@ -305,14 +493,15 @@ async function run() {
     assert.equal(await page.locator("#library-sort").evaluate(function (select) { return getComputedStyle(select).appearance; }), "auto");
     await page.emulateMedia({ forcedColors: "none" });
 
-    await waitForProgressSave(page, function () { return page.goto(base + bookPath + "/read/0"); });
+    await page.goto(base + bookPath + "/read/0");
     await checkReaderStatus(page);
     await page.route("**/api/progress", function (route) { return route.fulfill({ status: 500, body: "simulated failure" }); });
     await page.evaluate(function () { window.scrollBy(0, 500); });
+    await page.locator("#save-progress-btn").click();
     await page.waitForFunction(function () { return document.getElementById("reader-status").classList.contains("save-error"); });
     await checkReaderStatus(page, true);
     await page.unroute("**/api/progress");
-    await waitForProgressSave(page, function () { return page.evaluate(function () { window.scrollBy(0, 100); }); });
+    await waitForProgressSave(page, function () { return page.locator("#save-progress-btn").click(); });
     await checkReaderStatus(page);
     for (const [chapter, language, expected] of [
       [1, "en", "Actual chapter title (continued)"],
@@ -358,7 +547,7 @@ async function run() {
       }
     }
     assert.deepEqual(errors, []);
-    console.log("Chromium checks passed: attached superscript markers, localized continuation titles, actual/long endnotes, keyboard/focus, font upload/loading, preferences, annotation creation/edit/overlap/export, mobile TOC, progress restore, filters, save failures.");
+    console.log("Chromium checks passed: endnotes, fonts, preferences, annotations, manual progress, multi-device restore, bookmarks, pagination, manual completion, mobile layout, export removal, save failures.");
   } catch (error) {
     console.error(serverOutput);
     throw error;

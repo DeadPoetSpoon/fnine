@@ -112,6 +112,7 @@ pub struct ChapterEntry {
     pub index: usize,
     pub label: String,
     pub continuation: usize,
+    pub is_cover: bool,
 }
 
 impl ChapterEntry {
@@ -151,15 +152,41 @@ pub fn extract_toc(path: &Path) -> Result<Vec<ChapterEntry>, AppError> {
             .and_then(|entry| entry.manifest_entry())
             .map(|entry| entry.href().path().to_string());
         let label = resource.and_then(|resource| labels.get(&resource).cloned());
+        let is_cover =
+            label.is_none() && (i == 0 || chapters.last().is_some_and(|entry| entry.is_cover));
+        if i == 0 && is_cover {
+            let entry = spine
+                .get(i)
+                .and_then(|entry| entry.manifest_entry())
+                .ok_or_else(|| AppError::BadRequest("Missing first chapter".into()))?;
+            let html = entry
+                .read_str()
+                .map_err(|error| AppError::BadRequest(error.to_string()))?;
+            if super::content::extract(&epub, entry.href().path().as_str(), &html)?
+                .text()
+                .trim()
+                .is_empty()
+            {
+                continue;
+            }
+        }
         let (label, continuation) = match (label, chapters.last()) {
             (Some(label), _) => (label, 0),
             (None, Some(previous)) => (previous.label.clone(), previous.continuation + 1),
-            (None, None) => (format!("Chapter {}", i + 1), 0),
+            (None, None) => (
+                if is_cover {
+                    "Cover".to_string()
+                } else {
+                    format!("Chapter {}", i + 1)
+                },
+                0,
+            ),
         };
         chapters.push(ChapterEntry {
             index: i,
             label,
             continuation,
+            is_cover,
         });
     }
     Ok(chapters)
